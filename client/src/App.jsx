@@ -31,7 +31,11 @@ import {
   Network,
   Share2,
   Link2,
-  Layers
+  Layers,
+  FolderTree,
+  Boxes,
+  Workflow,
+  Search
 } from 'lucide-react';
 
 export default function App() {
@@ -65,6 +69,11 @@ export default function App() {
   const [linkTarget, setLinkTarget] = useState('');
   const [linkType, setLinkType] = useState('depends_on');
   const [linkLabel, setLinkLabel] = useState('');
+  const [hierarchyData, setHierarchyData] = useState({ clusters: [], summary: { totalClusters: 0, totalDecisions: 0, coherenceScore: 100 } });
+  const [selectedCluster, setSelectedCluster] = useState(null);
+  const [hierarchySearchQuery, setHierarchySearchQuery] = useState('');
+  const [hierarchySearchResult, setHierarchySearchResult] = useState(null);
+  const [isClustering, setIsClustering] = useState(false);
   const [activeInspection, setActiveInspection] = useState(null);
   const [inspectOpen, setInspectOpen] = useState(false);
   const [timeMachineOpen, setTimeMachineOpen] = useState(false);
@@ -276,6 +285,50 @@ export default function App() {
       loadGraphData();
     } catch (err) {
       showToast('Error linking nodes', 'error');
+    }
+  };
+
+  const loadHierarchyData = async () => {
+    try {
+      const res = await fetch(`/api/hierarchy?workspaceId=${activeTeam?.id || 'ws_core'}`);
+      const data = await res.json();
+      setHierarchyData(data);
+      if (data.clusters?.length > 0) {
+        setSelectedCluster(data.clusters[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load hierarchy data:', err);
+    }
+  };
+
+  const handleRecluster = async () => {
+    setIsClustering(true);
+    try {
+      const res = await fetch('/api/hierarchy/recluster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: activeTeam?.id || 'ws_core' })
+      });
+      const data = await res.json();
+      setHierarchyData(data.hierarchy);
+      showToast('Semantic clustering completed and centroid vectors updated', 'success');
+    } catch (err) {
+      showToast('Failed to recluster memories', 'error');
+    } finally {
+      setIsClustering(false);
+    }
+  };
+
+  const handleHierarchySearch = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!hierarchySearchQuery.trim()) return;
+    try {
+      const res = await fetch(`/api/hierarchy/search?q=${encodeURIComponent(hierarchySearchQuery.trim())}&workspaceId=${activeTeam?.id || 'ws_core'}`);
+      const data = await res.json();
+      setHierarchySearchResult(data);
+      showToast(`Resolved to: ${data.matchedCluster?.name}`, 'success');
+    } catch (err) {
+      showToast('Hierarchical search failed', 'error');
     }
   };
 
@@ -850,7 +903,18 @@ export default function App() {
                       ledgerView === 'graph' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <Network className="w-3.5 h-3.5" /> Knowledge Graph & Lineage
+                    <Network className="w-3.5 h-3.5" /> Knowledge Graph
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLedgerView('hierarchy');
+                      loadHierarchyData();
+                    }}
+                    className={`px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition ${
+                      ledgerView === 'hierarchy' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FolderTree className="w-3.5 h-3.5" /> Domain Hierarchy
                   </button>
                 </div>
 
@@ -885,6 +949,16 @@ export default function App() {
                   </button>
                 )}
 
+                {ledgerView === 'hierarchy' && (
+                  <button
+                    onClick={handleRecluster}
+                    disabled={isClustering}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition shadow disabled:opacity-50"
+                  >
+                    <Boxes className="w-3.5 h-3.5" /> {isClustering ? 'Clustering...' : 'Re-cluster'}
+                  </button>
+                )}
+
                 <button
                   onClick={() => openAddModal()}
                   className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition shadow"
@@ -894,8 +968,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Content: Cards View vs Knowledge Graph View */}
-            {ledgerView === 'cards' ? (
+            {/* Content: Cards View vs Knowledge Graph View vs Domain Hierarchy */}
+            {ledgerView === 'cards' && (
               <div className="flex-1 overflow-y-auto p-4">
                 {memories.length === 0 ? (
                   <div className="text-center py-24 text-slate-500 space-y-2">
@@ -998,8 +1072,10 @@ export default function App() {
                   </div>
                 )}
               </div>
-            ) : (
-              /* KNOWLEDGE GRAPH & GRAPHRAG MULTI-HOP LINEAGE EXPLORER */
+            )}
+
+            {/* KNOWLEDGE GRAPH & GRAPHRAG MULTI-HOP LINEAGE EXPLORER */}
+            {ledgerView === 'graph' && (
               <div className="flex-1 flex overflow-hidden">
                 {/* Visual Topology Canvas */}
                 <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-950">
@@ -1384,6 +1460,289 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* DOMAIN HIERARCHY & MULTI-VECTOR RESOLUTION */}
+            {ledgerView === 'hierarchy' && (
+              <div className="flex-1 flex overflow-hidden">
+                {/* Left Pane: Macro Architectural Domain Clusters */}
+                <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 border-r border-slate-800">
+                  {/* Summary Ribbon */}
+                  <div className="px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/40 flex items-center justify-between text-xs flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[11px] font-bold">
+                        Domains: {hierarchyData.summary?.totalClusters || hierarchyData.clusters?.length || 0}
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-lg bg-indigo-950/80 border border-indigo-800 text-indigo-300 font-mono text-[11px] font-bold">
+                        Clustered Decisions: {hierarchyData.summary?.totalDecisions || 0}
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-lg bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1">
+                        <Award className="w-3 h-3 text-purple-400" /> Coherence: {hierarchyData.summary?.coherenceScore || 100}%
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1.5 font-mono">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      Voyage-4 1024D Centroid Index
+                    </div>
+                  </div>
+
+                  {/* Clusters List */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {(!hierarchyData.clusters || hierarchyData.clusters.length === 0) ? (
+                      <div className="text-center py-24 text-slate-500 space-y-2">
+                        <FolderTree className="w-10 h-10 mx-auto text-slate-600 animate-pulse" />
+                        <p className="text-xs font-semibold text-slate-400">No domain clusters computed yet.</p>
+                        <p className="text-[11px] text-slate-500">Click "Re-cluster" to synthesize hierarchical domains from memories.</p>
+                      </div>
+                    ) : (
+                      hierarchyData.clusters.map((cluster) => {
+                        const isSelected = selectedCluster?.id === cluster.id;
+                        return (
+                          <div
+                            key={cluster.id}
+                            onClick={() => setSelectedCluster(cluster)}
+                            className={`rounded-2xl border transition p-4 space-y-3 cursor-pointer ${
+                              isSelected
+                                ? 'bg-slate-900 border-emerald-500/80 shadow-lg shadow-emerald-950/30'
+                                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            {/* Domain Header */}
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-emerald-950 border border-emerald-800/80 text-emerald-400">
+                                  <FolderTree className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                                    {cluster.name}
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                                      {cluster.topic}
+                                    </span>
+                                  </h3>
+                                  <p className="text-[10px] text-slate-400">
+                                    {cluster.childCount} Child Directives • 1024D Macro Centroid Vector
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                  {cluster.activeCount} Active
+                                </span>
+                                {cluster.supersededCount > 0 && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                                    {cluster.supersededCount} Superseded
+                                  </span>
+                                )}
+                                <span className="text-[10px] font-mono text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800">
+                                  {cluster.healthScore}% Coherent
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Macro Directive Synthesis */}
+                            <div className="bg-slate-950/90 rounded-xl p-3 border border-emerald-900/40 text-xs">
+                              <div className="text-[10px] font-bold text-emerald-400 mb-1 flex items-center gap-1">
+                                <ShieldCheck className="w-3 h-3 text-emerald-400" /> Macro Domain Policy:
+                              </div>
+                              <p className="text-slate-200 font-medium leading-relaxed italic">
+                                "{cluster.macroDirective}"
+                              </p>
+                            </div>
+
+                            {/* Child Micro-Decisions */}
+                            <div className="space-y-1.5 pt-1">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                <Workflow className="w-3 h-3 text-indigo-400" /> Resolved Child Micro-Decisions
+                              </div>
+                              <div className="grid grid-cols-1 gap-2">
+                                {cluster.children.map((child) => (
+                                  <div
+                                    key={child.id}
+                                    className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                                      child.status === 'active'
+                                        ? 'bg-slate-950 border-slate-800 text-slate-200'
+                                        : child.status === 'superseded'
+                                        ? 'bg-slate-950/70 border-amber-900/40 text-slate-400'
+                                        : 'bg-slate-950/50 border-slate-900 text-slate-500'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                                      <span className="text-indigo-400 font-bold font-mono text-xs">↳</span>
+                                      <span className="truncate font-medium text-[11px]">{child.statement}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                          child.status === 'active'
+                                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                            : child.status === 'superseded'
+                                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                                            : 'bg-slate-800 text-slate-400'
+                                        }`}
+                                      >
+                                        {child.status}
+                                      </span>
+                                      <span className="text-[9px] text-slate-400 font-mono">
+                                        by {child.owner}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Pane: Interactive Hierarchical Multi-Vector Sandbox */}
+                <div className="w-80 md:w-96 bg-slate-900/60 flex flex-col overflow-y-auto">
+                  <div className="p-3.5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                      <Boxes className="w-4 h-4 text-emerald-400" />
+                      Multi-Vector Domain Sandbox
+                    </h3>
+                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono text-[9px] font-bold">
+                      Hierarchical RAG
+                    </span>
+                  </div>
+
+                  <div className="p-4 space-y-4 text-xs">
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Test multi-tier retrieval: queries first match the 1024D centroid of the macro architectural domain, preventing cross-topic contamination before resolving micro-decisions.
+                    </p>
+
+                    <form onSubmit={handleHierarchySearch} className="space-y-2">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={hierarchySearchQuery}
+                          onChange={(e) => setHierarchySearchQuery(e.target.value)}
+                          placeholder="e.g. Can we use Redis for caching?"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                        <button
+                          type="submit"
+                          className="absolute right-1.5 top-1.5 p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Quick preset chips */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {[
+                          'Can we use Redis for caching?',
+                          'Are there any deployment freezes?',
+                          'What IDE theme is preferred?'
+                        ].map((prompt, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setHierarchySearchQuery(prompt);
+                              setTimeout(() => {
+                                const fetchSearch = async () => {
+                                  try {
+                                    const res = await fetch(`/api/hierarchy/search?q=${encodeURIComponent(prompt)}&workspaceId=${activeTeam?.id || 'ws_core'}`);
+                                    const data = await res.json();
+                                    setHierarchySearchResult(data);
+                                  } catch (err) {}
+                                };
+                                fetchSearch();
+                              }, 50);
+                            }}
+                            className="text-[10px] px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-600 transition truncate max-w-full"
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
+                    </form>
+
+                    {/* Results Display */}
+                    {hierarchySearchResult ? (
+                      <div className="space-y-3 pt-2">
+                        {/* Step 1: Matched Macro Domain */}
+                        <div className="bg-slate-950 p-3 rounded-xl border border-emerald-800 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-emerald-400 text-xs">
+                              Level 1: Macro Domain Match
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[9px] font-bold border border-emerald-800">
+                              {Math.round((hierarchySearchResult.matchedCluster?.domainScore || 0) * 100)}% Sim
+                            </span>
+                          </div>
+                          <p className="text-white font-bold text-xs">
+                            {hierarchySearchResult.matchedCluster?.name}
+                          </p>
+                          <p className="text-slate-300 text-[11px] italic">
+                            "{hierarchySearchResult.matchedCluster?.macroDirective}"
+                          </p>
+                        </div>
+
+                        {/* Step 2: Resolved Child Decisions */}
+                        <div className="space-y-1.5">
+                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                            <Workflow className="w-3.5 h-3.5 text-indigo-400" />
+                            Level 2: Resolved Child Decisions
+                          </span>
+                          <div className="space-y-1.5">
+                            {hierarchySearchResult.resolvedDecisions?.map((dec, idx) => (
+                              <div
+                                key={idx}
+                                className={`p-2 rounded-xl border text-[11px] ${
+                                  dec.status === 'active'
+                                    ? 'bg-slate-950 border-emerald-900/60 text-slate-200'
+                                    : 'bg-slate-950/70 border-slate-800 text-slate-400 opacity-70'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-[9px] mb-1">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded font-bold uppercase ${
+                                      dec.status === 'active'
+                                        ? 'bg-emerald-950 text-emerald-300'
+                                        : 'bg-slate-800 text-slate-400'
+                                    }`}
+                                  >
+                                    {dec.status}
+                                  </span>
+                                  <span className="font-mono text-indigo-300">
+                                    Score: {Math.round(dec.score * 100)}%
+                                  </span>
+                                </div>
+                                <p className="font-medium">{dec.statement}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Step 3: Hierarchical Prompt Grounding Context */}
+                        <div className="space-y-1">
+                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                            Hierarchical Prompt Context
+                          </span>
+                          <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[9px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                            {hierarchySearchResult.hierarchicalContext}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 text-center text-slate-500 space-y-1">
+                        <Boxes className="w-6 h-6 mx-auto text-slate-600" />
+                        <p className="text-[11px] font-medium text-slate-400">No active search</p>
+                        <p className="text-[10px]">Type a query or click a quick prompt above to test hierarchical multi-vector resolution.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -11,7 +11,9 @@ import {
   exportDpoDataset,
   getMemoryGraph,
   traverseGraphRAG,
-  addMemoryRelation
+  addMemoryRelation,
+  buildHierarchicalClusters,
+  searchHierarchicalMemories
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -200,5 +202,30 @@ const traversal = await traverseGraphRAG(res3.extracted._id, 2);
 assert(traversal.neighbors.length > 0, 'GraphRAG traversal must resolve connected lineage');
 console.log('✔ Passed: Multi-hop graph lineage and GraphRAG traversal verified.\n');
 
-console.log('🎉 ALL 9 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+console.log('▶ TEST 10: Hierarchical Multi-Vector Clustering & Parent-Child Memory Resolution');
+const hierarchy = await buildHierarchicalClusters('ws_core');
+assert(Array.isArray(hierarchy.clusters), 'Hierarchy must return cluster list');
+assert(hierarchy.clusters.length > 0, 'Hierarchy must form at least 1 macro domain cluster');
+assert(hierarchy.summary.coherenceScore >= 80, 'Coherence score must be healthy');
+
+const persistenceCluster = hierarchy.clusters.find(c => c.id === 'domain_persistence');
+assert(persistenceCluster, 'Should form domain_persistence cluster from seeded memories');
+assert(Array.isArray(persistenceCluster.macroVector) && persistenceCluster.macroVector.length === 1024, 'Macro cluster must have 1024D centroid vector');
+assert(persistenceCluster.children.length > 0, 'Domain cluster must contain child micro-decisions');
+
+// Test hierarchical multi-vector query resolution
+const hSearch = await searchHierarchicalMemories({
+  query: 'Can we use Redis for caching queries in MongoDB?',
+  workspaceId: 'ws_core'
+});
+
+assert(hSearch.matchedCluster, 'Hierarchical search must match a macro architectural domain');
+assert(hSearch.matchedCluster.id === 'domain_persistence', 'Query must resolve to persistence & data layer');
+assert(hSearch.resolvedDecisions.length > 0, 'Hierarchical search must drill down into child micro-decisions');
+assert(hSearch.hierarchicalContext.includes('Persistence & Data Layer'), 'Context must include macro domain');
+console.log(`Matched Macro Domain: ${hSearch.matchedCluster.name} (Match: ${Math.round(hSearch.matchedCluster.domainScore * 100)}%)`);
+console.log(`Resolved Child Decisions: ${hSearch.resolvedDecisions.length}`);
+console.log('✔ Passed: Hierarchical multi-vector clustering and parent-child domain resolution verified.\n');
+
+console.log('🎉 ALL 10 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);
