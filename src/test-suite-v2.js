@@ -18,7 +18,7 @@ import { recallMemories } from './recall-engine-v2.js';
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
 await initMongo();
-wipeAllStoredData();
+await wipeAllStoredData();
 setSimulatedTime('2026-10-30T10:00:00.000Z');
 
 // ----------------------------------------------------
@@ -153,3 +153,4 @@ assert.strictEqual(privacyCheck.safe, false, 'Credentials must be rejected');
 console.log('✔ Passed: Privacy gate prevented persisting credentials.\n');
 
 console.log('🎉 ALL 7 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+process.exit(0);
