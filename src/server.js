@@ -13,7 +13,12 @@ import {
   insertMemory,
   updateMemory,
   deleteMemory,
-  getAuditLogs
+  getAuditLogs,
+  getAllCodeTasks,
+  getCodeTaskById,
+  deleteCodeTask,
+  getCodingStats,
+  clearAllCodeTasks
 } from './db.js';
 import {
   processMessageForMemory,
@@ -24,6 +29,11 @@ import {
 import { recallFromMemory } from './recall-engine.js';
 import { seedDemoData } from './seed-data.js';
 import { generateEmbedding } from './vector-search.js';
+import {
+  checkPromptCollision,
+  claimAndExecuteTask,
+  adoptExistingTask
+} from './prompt-guard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -307,6 +317,92 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ----------------------------------------------------
+    // TEAM CODING & PROMPT COLLISION GUARD (TOKEN SAVER)
+    // ----------------------------------------------------
+
+    // 14. POST /api/coding/check-prompt (Pre-flight check before execution)
+    if (req.method === 'POST' && pathname === '/api/coding/check-prompt') {
+      const body = await parseBody(req);
+      const prompt = (body.prompt || '').trim();
+      const candidateId = body.candidateId || 'Candidate B';
+
+      if (!prompt) {
+        return sendJson(res, 400, { error: 'Prompt is required' });
+      }
+
+      const analysis = checkPromptCollision(candidateId, prompt);
+      return sendJson(res, 200, analysis);
+    }
+
+    // 15. POST /api/coding/claim-task (Claim task and execute code generation)
+    if (req.method === 'POST' && pathname === '/api/coding/claim-task') {
+      const body = await parseBody(req);
+      const prompt = (body.prompt || '').trim();
+      const candidateId = body.candidateId || 'Candidate A';
+      const candidateRole = body.candidateRole || 'Developer';
+
+      if (!prompt) {
+        return sendJson(res, 400, { error: 'Prompt is required' });
+      }
+
+      const result = claimAndExecuteTask(candidateId, prompt, { candidateRole, status: body.status });
+      return sendJson(res, 201, result);
+    }
+
+    // 16. POST /api/coding/adopt-task (Adopt existing candidate's code & save tokens)
+    if (req.method === 'POST' && pathname === '/api/coding/adopt-task') {
+      const body = await parseBody(req);
+      const candidateId = body.candidateId || 'Candidate B';
+      const existingTaskId = body.existingTaskId;
+      const currentPrompt = body.currentPrompt;
+
+      if (!existingTaskId) {
+        return sendJson(res, 400, { error: 'existingTaskId is required' });
+      }
+
+      const result = adoptExistingTask(candidateId, existingTaskId, currentPrompt);
+      return sendJson(res, 200, result);
+    }
+
+    // 17. GET /api/coding/tasks (Get all active & past team coding tasks)
+    if (req.method === 'GET' && pathname === '/api/coding/tasks') {
+      const status = parsedUrl.searchParams.get('status');
+      const candidateId = parsedUrl.searchParams.get('candidateId');
+      const tasks = getAllCodeTasks({ status, candidateId });
+      return sendJson(res, 200, tasks);
+    }
+
+    // 18. GET /api/coding/stats (Token savings meter & collision prevention metrics)
+    if (req.method === 'GET' && pathname === '/api/coding/stats') {
+      const stats = getCodingStats();
+      return sendJson(res, 200, stats);
+    }
+
+    // 19. POST /api/coding/demo-collision (Seed Candidate A & B Collision Demo)
+    if (req.method === 'POST' && pathname === '/api/coding/demo-collision') {
+      clearAllCodeTasks();
+
+      // Step 1: Candidate A claims PostgreSQL Connection Pool
+      const taskA = claimAndExecuteTask(
+        'Candidate A',
+        'Create a PostgreSQL connection pool with retry logic and error handler in Node.js',
+        { candidateRole: 'Backend Lead', status: 'in_progress' }
+      );
+
+      // Step 2: Elena claims React User Profile UI
+      const taskElena = claimAndExecuteTask(
+        'Elena',
+        'Build a React user profile card component using Tailwind CSS',
+        { candidateRole: 'Frontend Dev', status: 'completed' }
+      );
+
+      return sendJson(res, 200, {
+        message: 'Collaborative coding scenario seeded! Candidate A is in_progress on PostgreSQL pool.',
+        tasks: [taskA.task, taskElena.task]
+      });
+    }
+
+    // ----------------------------------------------------
     // STATIC FILE SERVING
     // ----------------------------------------------------
     let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
@@ -326,6 +422,18 @@ const server = http.createServer(async (req, res) => {
 
 // Seed initial data if DB empty
 seedDemoData();
+if (getAllCodeTasks().length === 0) {
+  claimAndExecuteTask(
+    'Candidate A',
+    'Create a PostgreSQL connection pool with retry logic and error handler in Node.js',
+    { candidateRole: 'Backend Dev', status: 'in_progress' }
+  );
+  claimAndExecuteTask(
+    'Elena',
+    'Build a React user profile card component using Tailwind CSS',
+    { candidateRole: 'Frontend Dev', status: 'completed' }
+  );
+}
 
 server.listen(PORT, () => {
   console.log(`=======================================================`);

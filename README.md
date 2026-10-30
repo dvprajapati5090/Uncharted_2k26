@@ -186,6 +186,26 @@ Every response from the assistant includes a transparent inspection panel:
 
 ---
 
+### 5. 👥 Collaborative Coding & Token Guard (Prompt Deduplication)
+
+When multiple team members or candidates code on the same codebase:
+- **Candidate A** prompts the AI: *"Create a PostgreSQL connection pool with retry logic and error handler in Node.js"*.
+- **Candidate B** doesn't know Candidate A is doing this and prompts: *"Implement postgres connection pool with retry mechanism and error handler in express"*.
+
+#### How the Token Guard Intercepts & Protects:
+1. **Pre-Flight Prompt Interceptor:** When Candidate B types their prompt, the system vectorizes it and performs hybrid semantic comparison against all active and completed tasks in the team database.
+2. **Collision Radar Trigger:**
+   - Detects **73% semantic overlap** and shared file lock (`src/db/pool.js`).
+   - Flags: `⚠️ HIGH COLLISION: Candidate A is currently building this exact functionality!`.
+   - Calculates token savings: **~3,500 tokens ($0.07)** saved by preventing redundant AI generation.
+3. **Smart Work Allocation Options:**
+   - **`Adopt Candidate A's Work`**: Instantly clones Candidate A's generated code into Candidate B's workspace with **zero tokens spent**, incrementing the team's Token Savings Counter.
+   - **`Pivot to Sub-Task`**: Prompts Candidate B to work on complementary components (e.g. SQL migrations or API health endpoints) instead of duplicating the database pool.
+   - **`Force Execute`**: Candidate can choose to override if building an alternative prototype.
+4. **Live Team Work Board & Component Locks:** Displays real-time claims and file locks (`src/db/pool.js`, `src/components/UserProfile.jsx`) so team members never step on each other's code.
+
+---
+
 ## 🖥️ Interactive UI & Feature Walkthrough
 
 The web application provides a clean, modern interface:

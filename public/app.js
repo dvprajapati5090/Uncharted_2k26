@@ -33,13 +33,40 @@ const inspectPromptRawEl = document.getElementById('inspect-prompt-raw');
 // Views & Ledger Elements
 const viewChatEl = document.getElementById('view-chat');
 const viewLedgerEl = document.getElementById('view-ledger');
+const viewCodingEl = document.getElementById('view-coding');
 const tabChatBtn = document.getElementById('tab-chat-btn');
 const tabLedgerBtn = document.getElementById('tab-ledger-btn');
+const tabCodingBtn = document.getElementById('tab-coding-btn');
 const memoriesGridEl = document.getElementById('memories-grid');
 const memoryCountBadgeEl = document.getElementById('memory-count-badge');
 const statActiveCountEl = document.getElementById('stat-active-count');
 const statSupersededCountEl = document.getElementById('stat-superseded-count');
 const statExpiredCountEl = document.getElementById('stat-expired-count');
+
+// Team Coding Guard Elements
+const codingTokensSavedEl = document.getElementById('coding-tokens-saved');
+const codingCollisionsPreventedEl = document.getElementById('coding-collisions-prevented');
+const codingActiveClaimsEl = document.getElementById('coding-active-claims');
+const tokensSavedNavBadgeEl = document.getElementById('tokens-saved-nav-badge');
+const codingPromptInputEl = document.getElementById('coding-prompt-input');
+const codingCandidateSelectEl = document.getElementById('coding-candidate-select');
+const btnCheckCollisionEl = document.getElementById('btn-check-collision');
+const btnClaimTaskEl = document.getElementById('btn-claim-task');
+const collisionRadarCardEl = document.getElementById('collision-radar-card');
+const radarStatusBadgeEl = document.getElementById('radar-status-badge');
+const radarMessageEl = document.getElementById('radar-message');
+const radarRecommendationEl = document.getElementById('radar-recommendation');
+const radarSimilarityPctEl = document.getElementById('radar-similarity-pct');
+const radarSimilarityBarEl = document.getElementById('radar-similarity-bar');
+const radarFilesOverlapEl = document.getElementById('radar-files-overlap');
+const radarActionButtonsEl = document.getElementById('radar-action-buttons');
+const btnAdoptTaskEl = document.getElementById('btn-adopt-task');
+const codingTasksListEl = document.getElementById('coding-tasks-list');
+const codeViewerTitleEl = document.getElementById('code-viewer-title');
+const codeViewerAuthorEl = document.getElementById('code-viewer-author');
+const codeViewerContentEl = document.getElementById('code-viewer-content');
+
+let currentCollisionMatch = null;
 
 // Modal Elements
 const memoryModalEl = document.getElementById('memory-modal');
@@ -540,25 +567,285 @@ document.querySelectorAll('.quick-prompt-btn').forEach(btn => {
 });
 
 // ----------------------------------------------------
-// View Switching (Chat vs Ledger)
+// View Switching (Chat vs Ledger vs Coding Guard)
 // ----------------------------------------------------
 function switchToChat() {
   viewChatEl.classList.remove('hidden');
   viewLedgerEl.classList.add('hidden');
+  viewCodingEl.classList.add('hidden');
   tabChatBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600 text-white flex items-center gap-1.5 shadow';
   tabLedgerBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5';
+  tabCodingBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5';
 }
 
 function switchToLedger() {
   viewChatEl.classList.add('hidden');
   viewLedgerEl.classList.remove('hidden');
+  viewCodingEl.classList.add('hidden');
   tabLedgerBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600 text-white flex items-center gap-1.5 shadow';
   tabChatBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5';
+  tabCodingBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5';
   loadMemories();
+}
+
+function switchToCoding() {
+  viewChatEl.classList.add('hidden');
+  viewLedgerEl.classList.add('hidden');
+  viewCodingEl.classList.remove('hidden');
+  tabCodingBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-emerald-600 text-white flex items-center gap-1.5 shadow';
+  tabChatBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5';
+  tabLedgerBtn.className = 'px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5';
+  loadCodingStats();
+  loadCodingTasks();
 }
 
 tabChatBtn.onclick = switchToChat;
 tabLedgerBtn.onclick = switchToLedger;
+tabCodingBtn.onclick = switchToCoding;
+
+// ----------------------------------------------------
+// Collaborative Coding & Prompt Collision Guard Logic
+// ----------------------------------------------------
+async function loadCodingStats() {
+  try {
+    const res = await fetch('/api/coding/stats');
+    const stats = await res.json();
+    codingTokensSavedEl.textContent = stats.totalTokensSaved.toLocaleString();
+    codingCollisionsPreventedEl.textContent = stats.collisionsPrevented;
+    codingActiveClaimsEl.textContent = stats.activeClaims;
+    tokensSavedNavBadgeEl.textContent = `${stats.totalTokensSaved.toLocaleString()} Tokens Saved`;
+  } catch (err) {
+    console.error('Failed to load coding stats', err);
+  }
+}
+
+async function loadCodingTasks() {
+  try {
+    const res = await fetch('/api/coding/tasks');
+    const tasks = await res.json();
+    renderCodingTasks(tasks);
+  } catch (err) {
+    console.error('Failed to load coding tasks', err);
+  }
+}
+
+function renderCodingTasks(tasks) {
+  codingTasksListEl.innerHTML = '';
+  if (!tasks || tasks.length === 0) {
+    codingTasksListEl.innerHTML = `
+      <div class="text-center py-10 text-slate-500 text-xs">
+        <i data-lucide="inbox" class="w-6 h-6 mx-auto mb-1 text-slate-600"></i>
+        No active coding tasks claimed yet.
+      </div>
+    `;
+    refreshIcons();
+    return;
+  }
+
+  tasks.forEach((t, index) => {
+    const card = document.createElement('div');
+    const isFirst = index === 0;
+    
+    // Status badges
+    const statusBadges = {
+      in_progress: '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">IN PROGRESS</span>',
+      completed: '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">COMPLETED</span>',
+      deduplicated: '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">DEDUPLICATED (SAVED)</span>'
+    };
+
+    card.className = `p-3 rounded-xl border bg-slate-950 cursor-pointer transition hover:border-emerald-600/50 space-y-1.5 ${
+      t.status === 'in_progress' ? 'border-amber-800/60 shadow-amber-950/20' : t.status === 'deduplicated' ? 'border-indigo-800/60' : 'border-slate-800'
+    }`;
+
+    card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-5 h-5 rounded-full bg-slate-800 text-slate-200 flex items-center justify-center font-bold text-[10px]">
+            ${t.candidate_id.charAt(0)}
+          </div>
+          <span class="font-bold text-xs text-white">${escapeHtml(t.candidate_id)}</span>
+          <span class="text-[10px] text-slate-400">(${escapeHtml(t.candidate_role)})</span>
+        </div>
+        ${statusBadges[t.status] || ''}
+      </div>
+
+      <div class="text-xs font-semibold text-slate-200">
+        ${escapeHtml(t.intent_summary)}
+      </div>
+
+      <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/60 font-mono">
+        <div>Files: <span class="text-emerald-400 font-semibold">${(t.target_files || []).join(', ') || 'src/'}</span></div>
+        ${t.tokens_saved > 0 ? `<div class="text-emerald-400 font-bold">+${t.tokens_saved} Tokens Saved</div>` : `<div>${t.tokens_estimated} Tokens</div>`}
+      </div>
+    `;
+
+    card.onclick = () => viewTaskCode(t);
+    codingTasksListEl.appendChild(card);
+
+    if (isFirst) {
+      viewTaskCode(t);
+    }
+  });
+
+  refreshIcons();
+}
+
+function viewTaskCode(task) {
+  codeViewerTitleEl.innerHTML = `<i data-lucide="file-code" class="w-3.5 h-3.5 text-indigo-400"></i> ${escapeHtml(task.intent_summary)}`;
+  codeViewerAuthorEl.textContent = `Author: ${task.candidate_id} (${task.status.toUpperCase()})`;
+  codeViewerContentEl.textContent = task.result_code || '// No generated code recorded for this task';
+  refreshIcons();
+}
+
+// Pre-Flight Collision Check
+async function handleCheckCollision() {
+  const prompt = codingPromptInputEl.value.trim();
+  const candidateId = codingCandidateSelectEl.value;
+
+  if (!prompt) {
+    showToast('Please enter a prompt to evaluate', 'warning');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/coding/check-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, candidateId })
+    });
+
+    const analysis = await res.json();
+    currentCollisionMatch = analysis;
+
+    // Reveal Radar Card
+    collisionRadarCardEl.classList.remove('hidden');
+
+    // Status Badges & Colors
+    if (analysis.status === 'HIGH_COLLISION') {
+      radarStatusBadgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800';
+      radarStatusBadgeEl.textContent = 'HIGH COLLISION DETECTED';
+      radarSimilarityBarEl.className = 'h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full transition-all duration-500';
+      radarActionButtonsEl.classList.remove('hidden');
+      btnAdoptTaskEl.textContent = `Adopt ${analysis.matchedTask.candidate_id}'s Work (Save ~${analysis.estimatedSavings} Tokens)`;
+    } else if (analysis.status === 'SYNERGY_OVERLAP') {
+      radarStatusBadgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800';
+      radarStatusBadgeEl.textContent = 'SYNERGY OVERLAP';
+      radarSimilarityBarEl.className = 'h-full bg-gradient-to-r from-emerald-500 to-amber-500 rounded-full transition-all duration-500';
+      radarActionButtonsEl.classList.add('hidden');
+    } else {
+      radarStatusBadgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800';
+      radarStatusBadgeEl.textContent = 'APPROVED NOVEL TASK';
+      radarSimilarityBarEl.className = 'h-full bg-emerald-500 rounded-full transition-all duration-500';
+      radarActionButtonsEl.classList.add('hidden');
+    }
+
+    radarMessageEl.textContent = analysis.message;
+    radarRecommendationEl.textContent = analysis.recommendation;
+    radarSimilarityPctEl.textContent = `${Math.round(analysis.highestSimilarity * 100)}% Match`;
+    radarSimilarityBarEl.style.width = `${Math.round(analysis.highestSimilarity * 100)}%`;
+    radarFilesOverlapEl.textContent = (analysis.proposedFiles || []).join(', ') || 'src/index.js';
+
+    refreshIcons();
+  } catch (err) {
+    console.error('Failed to check collision', err);
+    showToast('Failed to check collision', 'error');
+  }
+}
+
+// Claim & Execute Task
+async function handleClaimTask() {
+  const prompt = codingPromptInputEl.value.trim();
+  const candidateId = codingCandidateSelectEl.value;
+
+  if (!prompt) {
+    showToast('Please enter a prompt to claim', 'warning');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/coding/claim-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, candidateId, candidateRole: 'Developer', status: 'in_progress' })
+    });
+
+    const data = await res.json();
+    showToast(`Task Claimed! ${candidateId} allocated to work board.`, 'success');
+    codingPromptInputEl.value = '';
+    collisionRadarCardEl.classList.add('hidden');
+    loadCodingStats();
+    loadCodingTasks();
+    if (data.task) viewTaskCode(data.task);
+  } catch (err) {
+    console.error('Failed to claim task', err);
+    showToast('Failed to claim task', 'error');
+  }
+}
+
+// Adopt Task (Zero Token Spend)
+async function handleAdoptTask() {
+  if (!currentCollisionMatch || !currentCollisionMatch.matchedTask) {
+    showToast('No matched task to adopt', 'warning');
+    return;
+  }
+
+  const candidateId = codingCandidateSelectEl.value;
+  const existingTaskId = currentCollisionMatch.matchedTask.id;
+  const currentPrompt = codingPromptInputEl.value.trim();
+
+  try {
+    const res = await fetch('/api/coding/adopt-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidateId, existingTaskId, currentPrompt })
+    });
+
+    const data = await res.json();
+    showToast(data.message, 'success');
+    collisionRadarCardEl.classList.add('hidden');
+    codingPromptInputEl.value = '';
+    loadCodingStats();
+    loadCodingTasks();
+    if (data.adoptedTask) viewTaskCode(data.adoptedTask);
+  } catch (err) {
+    console.error('Failed to adopt task', err);
+    showToast('Failed to adopt task', 'error');
+  }
+}
+
+btnCheckCollisionEl.onclick = handleCheckCollision;
+btnClaimTaskEl.onclick = handleClaimTask;
+btnAdoptTaskEl.onclick = handleAdoptTask;
+
+// Quick Prompt Fill in Coding Guard
+document.querySelectorAll('.coding-quick-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    codingPromptInputEl.value = btn.getAttribute('data-prompt');
+    handleCheckCollision();
+  });
+});
+
+// Scenario Button: Candidate A & B Collision Demo
+document.getElementById('btn-scenario-token-guard').onclick = async () => {
+  switchToCoding();
+  showToast('Starting Token Guard Demo: Seeding Candidate A on DB Pool...', 'info');
+
+  try {
+    await fetch('/api/coding/demo-collision', { method: 'POST' });
+    await loadCodingStats();
+    await loadCodingTasks();
+
+    codingCandidateSelectEl.value = 'Candidate B';
+    codingPromptInputEl.value = 'Implement postgres connection pool with retry mechanism and error handler in express';
+    
+    setTimeout(() => {
+      handleCheckCollision();
+      showToast('⚠️ Collision Intercepted: Candidate A is already building this! Zero tokens wasted.', 'warning');
+    }, 600);
+  } catch (err) {
+    console.error('Demo collision failed', err);
+  }
+};
 
 // Ledger Filters
 document.querySelectorAll('.ledger-filter-btn').forEach(btn => {
@@ -782,11 +1069,14 @@ document.getElementById('btn-seed-reset').onclick = async () => {
   if (!confirm('Reset memory database to initial state?')) return;
   try {
     await fetch('/api/demo/seed', { method: 'POST' });
+    await fetch('/api/coding/demo-collision', { method: 'POST' });
     showToast('Database reset to fresh baseline', 'info');
     loadChannels();
     loadMemories();
     loadMessages();
     loadSimulatedTime();
+    loadCodingStats();
+    loadCodingTasks();
   } catch (err) {
     console.error('Failed to reset', err);
   }
@@ -807,5 +1097,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadChannels();
   await loadSimulatedTime();
   await loadMemories();
+  await loadCodingStats();
   switchChannel('architecture');
 });

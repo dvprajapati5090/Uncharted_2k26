@@ -1,7 +1,20 @@
 import assert from 'node:assert';
-import { clearAllMemories, getAllMemories, getMemoryById, deleteMemory, updateMemory } from './db.js';
+import {
+  clearAllMemories,
+  getAllMemories,
+  getMemoryById,
+  deleteMemory,
+  updateMemory,
+  clearAllCodeTasks,
+  getCodingStats
+} from './db.js';
 import { processMessageForMemory, setSimulatedTime, getCurrentTime } from './memory-engine.js';
 import { recallFromMemory } from './recall-engine.js';
+import {
+  checkPromptCollision,
+  claimAndExecuteTask,
+  adoptExistingTask
+} from './prompt-guard.js';
 
 console.log('🧪 Starting SynapseMem Core Engine Verification Tests...\n');
 
@@ -114,4 +127,45 @@ assert.strictEqual(delSuccess, true, 'Delete operation should succeed');
 assert.strictEqual(getMemoryById(res3.extracted.id), null, 'Deleted memory should no longer exist');
 console.log('✔ Passed: Manual memory edits and deletions verified.\n');
 
-console.log('🎉 ALL 6 VERIFICATION TESTS PASSED SUCCESSFULLY! 100% OPERATIONAL.');
+// ----------------------------------------------------
+// Test 7: TEAM PROMPT DEDUPLICATION & COLLISION GUARD
+// ----------------------------------------------------
+console.log('▶ TEST 7: Team collaborative coding prompt deduplication and token saving');
+clearAllCodeTasks();
+
+// Step 1: Candidate A claims PostgreSQL connection pool
+const promptA = 'Create a PostgreSQL connection pool with retry logic and error handler in Node.js';
+const claimA = claimAndExecuteTask('Candidate A', promptA, { candidateRole: 'Backend Lead', status: 'in_progress' });
+assert.strictEqual(claimA.task.candidate_id, 'Candidate A');
+assert.strictEqual(claimA.task.status, 'in_progress');
+assert(claimA.task.target_files.includes('src/db/pool.js'), 'Target files should include pool.js');
+console.log('✔ Candidate A claimed task on src/db/pool.js');
+
+// Step 2: Candidate B sends overlapping prompt
+const promptB = 'Implement postgres connection pool with retry mechanism and error handler in express';
+const collisionAnalysis = checkPromptCollision('Candidate B', promptB);
+assert.strictEqual(collisionAnalysis.status, 'HIGH_COLLISION', 'Should be flagged as HIGH_COLLISION');
+assert(collisionAnalysis.highestSimilarity >= 0.65, 'Similarity should exceed 0.65 collision threshold');
+assert.strictEqual(collisionAnalysis.matchedTask.id, claimA.task.id, 'Should match Candidate A task');
+assert.strictEqual(collisionAnalysis.fileCollision, true, 'Should flag file collision');
+assert.strictEqual(collisionAnalysis.estimatedSavings, 3500, 'Estimated savings should be 3500 tokens');
+console.log(`✔ Collision detected! Match: ${Math.round(collisionAnalysis.highestSimilarity * 100)}%, Tokens to save: ${collisionAnalysis.estimatedSavings}`);
+
+// Step 3: Candidate B adopts Candidate A's work without running redundant AI inference
+const adoption = adoptExistingTask('Candidate B', claimA.task.id, promptB);
+assert.strictEqual(adoption.adoptedTask.status, 'deduplicated');
+assert.strictEqual(adoption.tokensSaved, 3500);
+
+// Verify team stats
+const stats = getCodingStats();
+assert.strictEqual(stats.collisionsPrevented, 1, 'Should have recorded 1 collision prevented');
+assert(stats.totalTokensSaved >= 3500, 'Total tokens saved should be at least 3500');
+console.log(`✔ Passed: Candidate B adopted Candidate A's work. Cumulative Tokens Saved: ${stats.totalTokensSaved} tokens.\n`);
+
+// Step 4: Candidate C submits a novel, non-overlapping task
+const promptC = 'Create Docker compose setup with Redis and MinIO storage';
+const uniqueAnalysis = checkPromptCollision('Candidate C', promptC);
+assert.notStrictEqual(uniqueAnalysis.status, 'HIGH_COLLISION', 'Novel task must NOT be flagged as collision');
+console.log('✔ Passed: Non-overlapping task approved as novel.\n');
+
+console.log('🎉 ALL 7 VERIFICATION TESTS PASSED SUCCESSFULLY! 100% OPERATIONAL.');

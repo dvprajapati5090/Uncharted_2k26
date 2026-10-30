@@ -90,6 +90,27 @@ function initTables(db) {
     );
   `);
 
+  // 6. Collaborative Code Tasks & Prompt Deduplication Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS code_tasks (
+      id TEXT PRIMARY KEY,
+      candidate_id TEXT NOT NULL,
+      candidate_role TEXT DEFAULT 'Developer',
+      prompt TEXT NOT NULL,
+      intent_summary TEXT NOT NULL,
+      target_files TEXT DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'in_progress',
+      tokens_estimated INTEGER DEFAULT 3500,
+      tokens_saved INTEGER DEFAULT 0,
+      matched_task_id TEXT,
+      similarity_score REAL DEFAULT 0.0,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      result_code TEXT,
+      vector TEXT
+    );
+  `);
+
   // Initialize default channels if not exists
   const channelCount = db.prepare('SELECT count(*) as count FROM channels').get().count;
   if (channelCount === 0) {
@@ -327,6 +348,172 @@ function formatMemoryRow(row) {
   return {
     ...row,
     tags: JSON.parse(row.tags || '[]'),
+    vector: row.vector ? JSON.parse(row.vector) : []
+  };
+}
+
+// ----------------------------------------------------
+// Collaborative Coding & Prompt Deduplication Operations
+// ----------------------------------------------------
+export function insertCodeTask(task) {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO code_tasks (
+      id, candidate_id, candidate_role, prompt, intent_summary,
+      target_files, status, tokens_estimated, tokens_saved,
+      matched_task_id, similarity_score, created_at, completed_at,
+      result_code, vector
+    ) VALUES (
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?
+    )
+  `);
+
+  stmt.run(
+    task.id,
+    task.candidate_id,
+    task.candidate_role || 'Developer',
+    task.prompt,
+    task.intent_summary || 'Custom Task',
+    JSON.stringify(task.target_files || []),
+    task.status || 'in_progress',
+    task.tokens_estimated || 3500,
+    task.tokens_saved || 0,
+    task.matched_task_id || null,
+    task.similarity_score || 0.0,
+    task.created_at || new Date().toISOString(),
+    task.completed_at || null,
+    task.result_code || '',
+    typeof task.vector === 'string' ? task.vector : JSON.stringify(task.vector || [])
+  );
+
+  return getCodeTaskById(task.id);
+}
+
+export function updateCodeTask(id, fields) {
+  const db = getDb();
+  const current = getCodeTaskById(id);
+  if (!current) return null;
+
+  const updated = {
+    ...current,
+    ...fields
+  };
+
+  const stmt = db.prepare(`
+    UPDATE code_tasks SET
+      candidate_id = ?,
+      candidate_role = ?,
+      prompt = ?,
+      intent_summary = ?,
+      target_files = ?,
+      status = ?,
+      tokens_estimated = ?,
+      tokens_saved = ?,
+      matched_task_id = ?,
+      similarity_score = ?,
+      completed_at = ?,
+      result_code = ?,
+      vector = ?
+    WHERE id = ?
+  `);
+
+  stmt.run(
+    updated.candidate_id,
+    updated.candidate_role,
+    updated.prompt,
+    updated.intent_summary,
+    typeof updated.target_files === 'string' ? updated.target_files : JSON.stringify(updated.target_files || []),
+    updated.status,
+    updated.tokens_estimated,
+    updated.tokens_saved,
+    updated.matched_task_id || null,
+    updated.similarity_score,
+    updated.completed_at || null,
+    updated.result_code || '',
+    typeof updated.vector === 'string' ? updated.vector : JSON.stringify(updated.vector || []),
+    id
+  );
+
+  return getCodeTaskById(id);
+}
+
+export function getCodeTaskById(id) {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM code_tasks WHERE id = ?').get(id);
+  if (!row) return null;
+  return formatCodeTaskRow(row);
+}
+
+export function getAllCodeTasks(filters = {}) {
+  const db = getDb();
+  let sql = 'SELECT * FROM code_tasks WHERE 1=1';
+  const params = [];
+
+  if (filters.candidate_id) {
+    sql += ' AND candidate_id = ?';
+    params.push(filters.candidate_id);
+  }
+
+  if (filters.status && filters.status !== 'all') {
+    sql += ' AND status = ?';
+    params.push(filters.status);
+  }
+
+  sql += ' ORDER BY created_at DESC';
+
+  const rows = db.prepare(sql).all(...params);
+  return rows.map(formatCodeTaskRow);
+}
+
+export function deleteCodeTask(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM code_tasks WHERE id = ?').run(id);
+  return true;
+}
+
+export function clearAllCodeTasks() {
+  const db = getDb();
+  db.exec('DELETE FROM code_tasks;');
+}
+
+export function getCodingStats() {
+  const db = getDb();
+  const tasks = db.prepare('SELECT * FROM code_tasks').all();
+  
+  let totalTokensUsed = 0;
+  let totalTokensSaved = 0;
+  let collisionsPrevented = 0;
+  let activeClaims = 0;
+
+  for (const t of tasks) {
+    totalTokensSaved += (t.tokens_saved || 0);
+    if (t.status === 'in_progress') {
+      activeClaims++;
+      totalTokensUsed += (t.tokens_estimated || 0);
+    } else if (t.status === 'completed') {
+      totalTokensUsed += (t.tokens_estimated || 0);
+    } else if (t.status === 'deduplicated') {
+      collisionsPrevented++;
+    }
+  }
+
+  return {
+    totalTasks: tasks.length,
+    activeClaims,
+    collisionsPrevented,
+    totalTokensSaved,
+    totalTokensUsed,
+    estimatedCostSaved: (totalTokensSaved / 1000 * 0.02).toFixed(3) // ~$0.02 per 1k tokens
+  };
+}
+
+function formatCodeTaskRow(row) {
+  return {
+    ...row,
+    target_files: JSON.parse(row.target_files || '[]'),
     vector: row.vector ? JSON.parse(row.vector) : []
   };
 }
