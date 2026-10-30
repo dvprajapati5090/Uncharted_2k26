@@ -106,10 +106,18 @@ export async function extractAndFormMemory({
     return { error: privacyCheck.reason, rejected: true };
   }
 
-  // Filter low-value greetings or transient chatter
+  // Filter low-value greetings, transient chatter, or queries
   const isGreetingOrFiller = /^(hi|hello|hey|good morning|thanks|thank you|ok|okay|bye)\b/i.test(text.trim());
   if (isGreetingOrFiller && text.trim().length < 25) {
     return { extracted: null, reason: 'Chat filler/greeting ignored.' };
+  }
+
+  // Interrogatives and questions must NEVER be extracted as stored decisions or constraints
+  const isQuestion = text.trim().endsWith('?') || 
+    /^(who|what|where|when|why|how|is|are|can|could|should|would|did)\b/i.test(text.trim()) ||
+    /^(do|does)\s+(we|i|you|they|it|anyone|anybody|the)\b/i.test(text.trim());
+  if (isQuestion) {
+    return { extracted: null, reason: 'Questions and queries are not architectural decisions or constraints.' };
   }
 
   const isDecision = /we(?:'re| are) using|decided (?:to|on)|switching to|settled on|will use|\bwe use\b|approved|now approved/i.test(text);

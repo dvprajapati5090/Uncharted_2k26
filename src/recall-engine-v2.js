@@ -38,7 +38,6 @@ export async function recallMemories({
     limit: 10,
     numCandidates: 100,
     filter: {
-      status: isHistorical ? undefined : 'active',
       workspaceId: allowedWorkspaceId
     }
   });
@@ -56,7 +55,9 @@ export async function recallMemories({
       rejectedMemories.push({
         id: candidate._id.toString(),
         topic: candidate.topic,
-        reason: 'Ownership scope mismatch (private to another user)'
+        reason: 'Ownership scope mismatch (private to another user)',
+        score: candidate.score,
+        statement: candidate.content?.statement
       });
       continue;
     }
@@ -66,16 +67,26 @@ export async function recallMemories({
       rejectedMemories.push({
         id: candidate._id.toString(),
         topic: candidate.topic,
-        reason: `Superseded by newer decision "${replacer?.content?.statement || 'updated directive'}"`
+        reason: `Superseded by newer decision "${replacer?.content?.statement || 'updated directive'}"`,
+        score: candidate.score,
+        statement: candidate.content?.statement
       });
       continue;
     }
 
-    if (candidate.validUntil && new Date(candidate.validUntil) < now) {
+    const isExpired = candidate.status === 'expired' || (candidate.validUntil && new Date(candidate.validUntil) < now);
+    if (!isHistorical && isExpired) {
+      const dateStr = candidate.validUntil 
+        ? new Date(candidate.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'scheduled date';
       rejectedMemories.push({
         id: candidate._id.toString(),
         topic: candidate.topic,
-        reason: `Logically expired on ${new Date(candidate.validUntil).toLocaleDateString()}`
+        reason: `Logically expired on ${dateStr}`,
+        score: candidate.score,
+        statement: candidate.content?.statement,
+        validUntil: candidate.validUntil,
+        isExpired: true
       });
       continue;
     }
@@ -84,7 +95,9 @@ export async function recallMemories({
       rejectedMemories.push({
         id: candidate._id.toString(),
         topic: candidate.topic,
-        reason: `Relevance score too low (${candidate.score})`
+        reason: `Relevance score too low (${candidate.score})`,
+        score: candidate.score,
+        statement: candidate.content?.statement
       });
       continue;
     }
@@ -93,7 +106,7 @@ export async function recallMemories({
   }
 
   // 5. Generate Grounded Answer & Dual-Mode Baseline (with memory vs. without memory)
-  const responseGeneration = synthesizeResponses(query, selectedMemories);
+  const responseGeneration = synthesizeResponses(query, selectedMemories, rejectedMemories);
 
   const trace = {
     query: query,
@@ -130,13 +143,33 @@ export async function recallMemories({
  * Dual-Mode Response Synthesizer:
  * Generates the memory-grounded response and the no-memory baseline for comparison
  */
-function synthesizeResponses(query, memories) {
+function synthesizeResponses(query, memories, rejectedMemories = []) {
   const qLower = query.toLowerCase();
 
   // Baseline (No Memory injected)
   let withoutMemory = `For general tasks, standard architectural patterns recommend typical industry tooling. For background job systems, a standard solution often employs Redis with BullMQ or Celery for rapid distributed task execution.`;
+  if (qLower.includes('deploy') || qLower.includes('freeze')) {
+    withoutMemory = `Standard deployment practices allow continuous delivery and automated pipeline deployments whenever CI checks pass, unless a manual freeze is coordinated in chat.`;
+  } else if (qLower.includes('database') || qLower.includes('db')) {
+    withoutMemory = `Modern cloud architectures commonly default to managed relational databases like PostgreSQL (Amazon RDS or Supabase) for transactional integrity.`;
+  }
+
+  // Check if an expired constraint explains why there is no active rule
+  const expiredDeployment = rejectedMemories.find(r => 
+    r.isExpired && (r.topic === 'Deployment' || /freeze|deployment/i.test(r.statement || ''))
+  );
 
   if (memories.length === 0) {
+    if ((qLower.includes('deploy') || qLower.includes('freeze')) && expiredDeployment) {
+      const expDate = expiredDeployment.validUntil 
+        ? new Date(expiredDeployment.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'the scheduled date';
+      return {
+        withMemory: `The prior restriction ("${expiredDeployment.statement}") was in effect, but it expired on ${expDate}. There are currently no active deployment freeze rules.`,
+        withoutMemory
+      };
+    }
+
     return {
       withMemory: `I checked the persistent memory ledger, but no active decision or constraint matches "${query}".`,
       withoutMemory
@@ -146,7 +179,13 @@ function synthesizeResponses(query, memories) {
   const primary = memories[0];
   let answer = '';
 
-  if (qLower.includes('background job') || qLower.includes('job system') || qLower.includes('queue')) {
+  if (qLower.includes('deploy') || qLower.includes('freeze')) {
+    const deploymentMem = memories.find(m => m.topic === 'Deployment' || /freeze|deployment/i.test(m.content?.statement || '')) || primary;
+    const untilStr = deploymentMem.validUntil 
+      ? ` until ${new Date(deploymentMem.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      : '';
+    answer = `Based on stored team constraint: "${deploymentMem.content.statement}"${untilStr}. (${deploymentMem.content.reason || 'Team architecture consensus'})`;
+  } else if (qLower.includes('background job') || qLower.includes('job system') || qLower.includes('queue')) {
     const hasRedisRestriction = memories.some(m => 
       m.type === 'constraint' && m.content.statement.toLowerCase().includes('redis')
     );
@@ -160,6 +199,15 @@ function synthesizeResponses(query, memories) {
       answer = `Based on stored memory, we have an active constraint: "Do not introduce Redis without approval". Therefore, we should build the background job system using MongoDB Change Streams or native Node.js worker pools without external queue infrastructure.`;
     } else {
       answer = `Based on stored architecture decisions: ${primary.content.statement}.`;
+    }
+  } else if (qLower.includes('redis') && qLower.includes('caching')) {
+    const hasRedisApproval = memories.some(m => 
+      m.type === 'decision' && m.content.statement.toLowerCase().includes('approved redis')
+    );
+    if (hasRedisApproval) {
+      answer = `Based on stored team memory: We have now approved Redis for caching, but MongoDB Atlas must remain our primary database.. (Team architecture consensus)`;
+    } else {
+      answer = `Based on stored team memory: ${primary.content.statement}. (${primary.content.reason})`;
     }
   } else if (qLower.includes('database') || qLower.includes('db')) {
     answer = `We are using ${primary.content.statement}. Reason: ${primary.content.reason}.`;

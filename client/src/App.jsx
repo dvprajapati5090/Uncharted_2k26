@@ -39,9 +39,27 @@ export default function App() {
   const [activeInspection, setActiveInspection] = useState(null);
   const [inspectOpen, setInspectOpen] = useState(false);
   const [timeMachineOpen, setTimeMachineOpen] = useState(false);
+  const [simulatedTime, setSimulatedTime] = useState('2026-10-30T10:00:00.000Z');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editMemory, setEditMemory] = useState(null);
   const [toast, setToast] = useState(null);
+
+  const channelQuickPrompts = {
+    'architecture': [
+      'For Project Atlas, we use Node.js, Express and MongoDB Atlas.',
+      'Do not introduce Redis or paid infrastructure without approval.',
+      'We have now approved Redis for caching, but MongoDB Atlas must remain our primary database.'
+    ],
+    'sprint-planning': [
+      'No production deployments until November 5, 2026.'
+    ],
+    'ask-assistant': [
+      'Design a background job system for scheduled notifications.',
+      'Can we use Redis for caching?',
+      'Are there any active deployment freeze rules?',
+      'What database are we using?'
+    ]
+  };
 
   // Form state
   const [formTopic, setFormTopic] = useState('');
@@ -64,6 +82,10 @@ export default function App() {
 
   const fetchInitialData = async () => {
     try {
+      const timeRes = await fetch('/api/time');
+      const timeData = await timeRes.json();
+      if (timeData?.simulatedTime) setSimulatedTime(timeData.simulatedTime);
+
       const teamRes = await fetch('/api/teams');
       const teams = await teamRes.json();
       setAllTeams(teams);
@@ -229,16 +251,31 @@ export default function App() {
     const target = new Date('2026-10-30T10:00:00.000Z');
     target.setDate(target.getDate() + days);
     try {
-      await fetch('/api/time', {
+      const res = await fetch('/api/time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isoString: target.toISOString() })
       });
-      showToast(`Time Machine advanced ${days === 0 ? 'Reset to Today' : '+' + days + ' days'}!`, 'info');
+      const data = await res.json();
+      if (data?.simulatedTime) setSimulatedTime(data.simulatedTime);
+      showToast(`Time Machine advanced: ${days === 0 ? 'Oct 30, 2026 (Active Freeze)' : 'Nov 6, 2026 (Freeze Expired)'}`, 'info');
       setTimeMachineOpen(false);
       loadMemories();
     } catch (err) {
       showToast('Time travel error', 'error');
+    }
+  };
+
+  const handleWipeData = async () => {
+    if (!confirm('Wipe and reset all memory & message stores to clean baseline?')) return;
+    try {
+      await fetch('/api/wipe', { method: 'POST' });
+      await handleTimeTravel(0); // reset clock to Oct 30, 2026
+      showToast('All memories and messages reset successfully.', 'warning');
+      loadMemories();
+      loadMessages();
+    } catch (err) {
+      showToast('Reset failed', 'error');
     }
   };
 
@@ -315,6 +352,15 @@ export default function App() {
         {/* Right Menu & User */}
         <div className="flex items-center space-x-2.5">
           <button
+            onClick={handleWipeData}
+            className="px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 font-semibold text-xs flex items-center gap-1.5 transition"
+            title="Wipe & Reset Memory Database"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden sm:inline">Reset</span>
+          </button>
+
+          <button
             onClick={handleRunGuidedDemo}
             className="px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold text-xs flex items-center gap-1.5 transition"
             title="Run 5-Step Demo"
@@ -325,10 +371,13 @@ export default function App() {
 
           <button
             onClick={() => setTimeMachineOpen(true)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 transition"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center gap-1.5 text-xs font-semibold"
             title="Time Machine (Temporal Expiry)"
           >
-            <History className="w-4 h-4" />
+            <History className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">
+              {new Date(simulatedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
           </button>
 
           <button
@@ -516,6 +565,24 @@ export default function App() {
 
               {/* Chat Input */}
               <div className="p-3 border-t border-slate-800 bg-slate-950/80">
+                {channelQuickPrompts[currentChannel] && (
+                  <div className="flex items-center gap-1.5 pb-2 mb-1 overflow-x-auto text-[11px] no-scrollbar">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase shrink-0 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-indigo-400" /> Quick Try:
+                    </span>
+                    {channelQuickPrompts[currentChannel].map((prompt, pIdx) => (
+                      <button
+                        key={pIdx}
+                        type="button"
+                        onClick={() => setInputText(prompt)}
+                        className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-600 transition text-[11px] truncate max-w-xs text-left"
+                        title={prompt}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                   <input
                     type="text"
@@ -760,19 +827,45 @@ export default function App() {
               </button>
             </div>
             <p className="text-slate-400 text-xs">Advance application time to verify how temporary assumptions automatically expire.</p>
+
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Current App Date:</span>
+                <span className="font-bold text-amber-300 font-mono">
+                  {new Date(simulatedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Deployment Freeze:</span>
+                <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                  new Date(simulatedTime) > new Date('2026-11-05T18:00:00.000Z')
+                    ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                    : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                }`}>
+                  {new Date(simulatedTime) > new Date('2026-11-05T18:00:00.000Z') ? 'EXPIRED (Post-Freeze)' : 'ACTIVE (Freeze In Effect)'}
+                </span>
+              </div>
+            </div>
+
             <div className="space-y-2 text-xs">
               <button
                 onClick={() => handleTimeTravel(0)}
                 className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-left flex items-center justify-between font-medium"
               >
-                <span>Reset to Today (Oct 30, 2026)</span>
+                <div>
+                  <div className="font-semibold">Reset to Oct 30, 2026</div>
+                  <div className="text-[10px] text-slate-400">Active sprint period (freeze active)</div>
+                </div>
                 <span className="text-indigo-400 font-bold">Reset</span>
               </button>
               <button
                 onClick={() => handleTimeTravel(7)}
                 className="w-full py-2.5 px-3 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-left flex items-center justify-between font-bold"
               >
-                <span>Fast-Forward +7 Days (Nov 6, 2026)</span>
+                <div>
+                  <div className="font-semibold">Fast-Forward +7 Days (Nov 6, 2026)</div>
+                  <div className="text-[10px] text-amber-400">Post-freeze period (freeze expired)</div>
+                </div>
                 <span className="text-amber-400">+7d</span>
               </button>
             </div>
