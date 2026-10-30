@@ -1,0 +1,21 @@
+{
+  "name": "team-memory-assistant",
+  "version": "1.0.0",
+  "description": "Memory-powered assistant for team decisions and recall",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "memory",
+    "assistant",
+    "decision-tracking",
+    "retrieval",
+    "ai",
+    "team-collaboration"
+  ],
+  "author": "DeepMind Agent",
+  "license": "MIT"
+}
