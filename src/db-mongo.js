@@ -99,6 +99,40 @@ export async function setupIndexes(database) {
       { name: 'idx_event_memory' }
     );
 
+    // 5. Training feedback collection init
+    const feedbackCol = database.collection('training_feedback');
+    const fbCount = await feedbackCol.countDocuments({});
+    if (fbCount === 0) {
+      await feedbackCol.insertMany([
+        {
+          _id: 'fb_seed_001',
+          messageId: 'msg_seed_1',
+          query: 'Design a background job system for scheduled notifications.',
+          chosenAnswer: 'Based on stored memory, we have an active constraint: "Do not introduce Redis without approval". Therefore, we should build the background job system using MongoDB Change Streams.',
+          rejectedAnswer: 'For background job systems, a standard solution often employs Redis with BullMQ or Celery for rapid distributed task execution.',
+          rating: 1,
+          reasonTag: 'adhered_to_constraint',
+          memoryIds: [],
+          workspaceId: 'ws_core',
+          userId: 'u_sarah',
+          timestamp: new Date()
+        },
+        {
+          _id: 'fb_seed_002',
+          messageId: 'msg_seed_2',
+          query: 'Can we use Redis for caching?',
+          chosenAnswer: 'Based on stored team memory: We have now approved Redis for caching, but MongoDB Atlas must remain our primary database.',
+          rejectedAnswer: 'Standard infrastructure architectures commonly integrate Redis for caching without restriction.',
+          rating: 1,
+          reasonTag: 'adhered_to_constraint',
+          memoryIds: [],
+          workspaceId: 'ws_core',
+          userId: 'u_sarah',
+          timestamp: new Date()
+        }
+      ]);
+    }
+
     console.log('[MongoDB] Collections and standard indexes (including TTL index) verified.');
   } catch (err) {
     console.warn('[MongoDB] Index creation notice:', err.message);
@@ -122,6 +156,35 @@ function initDefaultData() {
       description: 'Backend, Frontend, and Data Systems Team',
       createdAt: now
     });
+
+    if (memoryStore.feedback.length === 0) {
+      memoryStore.feedback.push({
+        _id: 'fb_seed_001',
+        messageId: 'msg_seed_1',
+        query: 'Design a background job system for scheduled notifications.',
+        chosenAnswer: 'Based on stored memory, we have an active constraint: "Do not introduce Redis without approval". Therefore, we should build the background job system using MongoDB Change Streams.',
+        rejectedAnswer: 'For background job systems, a standard solution often employs Redis with BullMQ or Celery for rapid distributed task execution.',
+        rating: 1,
+        reasonTag: 'adhered_to_constraint',
+        memoryIds: [],
+        workspaceId: 'ws_core',
+        userId: 'u_sarah',
+        timestamp: new Date()
+      });
+      memoryStore.feedback.push({
+        _id: 'fb_seed_002',
+        messageId: 'msg_seed_2',
+        query: 'Can we use Redis for caching?',
+        chosenAnswer: 'Based on stored team memory: We have now approved Redis for caching, but MongoDB Atlas must remain our primary database.',
+        rejectedAnswer: 'Standard infrastructure architectures commonly integrate Redis for caching without restriction.',
+        rating: 1,
+        reasonTag: 'adhered_to_constraint',
+        memoryIds: [],
+        workspaceId: 'ws_core',
+        userId: 'u_sarah',
+        timestamp: new Date()
+      });
+    }
   }
 }
 
@@ -378,18 +441,22 @@ export function getChannels() {
   return memoryStore.channels;
 }
 
-export async function wipeAllStoredData() {
+export async function wipeAllStoredData(includeFeedback = false) {
   if (db && isConnected) {
     try {
       await db.collection(config.mongodb.memoriesCollection).deleteMany({});
       await db.collection(config.mongodb.eventsCollection).deleteMany({});
       await db.collection('conversations').deleteMany({});
-      await db.collection('training_feedback').deleteMany({});
+      if (includeFeedback) {
+        await db.collection('training_feedback').deleteMany({});
+      }
     } catch (e) {}
   }
   memoryStore.memories.clear();
   memoryStore.events = [];
-  memoryStore.feedback = [];
+  if (includeFeedback) {
+    memoryStore.feedback = [];
+  }
   conversationStore.length = 0;
   initDefaultData();
 }
@@ -469,7 +536,7 @@ export async function getFeedbackList(limit = 50) {
         .sort({ timestamp: -1 })
         .limit(limit)
         .toArray();
-      if (items.length > 0) return items;
+      return items;
     } catch (e) {}
   }
   return [...memoryStore.feedback].reverse().slice(0, limit);

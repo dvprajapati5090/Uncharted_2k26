@@ -196,7 +196,7 @@ export async function extractAndFormMemory({
     updatedAt: now,
     validFrom: now,
     validUntil: temporal.validUntil,
-    purgeAt: temporal.validUntil ? new Date(temporal.validUntil.getTime() + (7 * 24 * 3600 * 1000)) : null,
+    purgeAt: temporal.validUntil ? new Date(Math.max(Date.now(), temporal.validUntil.getTime()) + (30 * 24 * 3600 * 1000)) : null,
     supersedesId: null,
     supersededBy: null,
     version: 1,
