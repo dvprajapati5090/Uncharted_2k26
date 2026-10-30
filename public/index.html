@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SynapseMem — Team Memory & Chatbot</title>
+  <title>SynapseMem 2.0 — The Memory Operating System for AI Agents</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -39,7 +39,7 @@
         <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
           <i data-lucide="brain-circuit" class="w-4 h-4"></i>
         </div>
-        <span class="text-sm font-bold tracking-tight text-white hidden sm:inline">SynapseMem</span>
+        <span class="text-sm font-bold tracking-tight text-white hidden sm:inline">SynapseMem 2.0</span>
       </div>
 
       <!-- Current Team Pill & Switcher -->
@@ -74,10 +74,7 @@
         <i data-lucide="database" class="w-3.5 h-3.5"></i> Memory Ledger
         <span id="memory-count-badge" class="px-1.5 py-0.2 bg-slate-800 text-slate-300 text-[10px] rounded-full font-bold">0</span>
       </button>
-      <button id="tab-coding-btn" class="px-3.5 py-1 rounded-md font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
-        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Token Guard
-      </button>
-    </nav>
+      </nav>
 
     <!-- Right: Active User Pill + Actions Menu -->
     <div class="flex items-center space-x-2">
@@ -126,6 +123,10 @@
         <div id="more-options-menu" class="absolute right-0 mt-1.5 w-48 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1 text-xs z-50 hidden">
           <button id="btn-open-time-machine" class="w-full text-left px-3 py-1.5 hover:bg-slate-800 text-slate-300 flex items-center gap-2">
             <i data-lucide="history" class="w-3.5 h-3.5 text-amber-400"></i> Time Machine Simulator
+          </button>
+          <div class="border-t border-slate-800 my-1"></div>
+          <button id="btn-run-guided-demo" class="w-full text-left px-3 py-1.5 hover:bg-indigo-950/70 text-indigo-300 font-semibold flex items-center gap-2">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5 text-indigo-400"></i> Run Guided 5-Step Demo
           </button>
           <div class="border-t border-slate-800 my-1"></div>
           <button id="btn-seed-reset" class="w-full text-left px-3 py-1.5 hover:bg-rose-950/60 text-rose-400 flex items-center gap-2">
@@ -405,7 +406,7 @@
         <div class="w-12 h-12 rounded-xl bg-indigo-600 mx-auto flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
           <i data-lucide="brain-circuit" class="w-7 h-7"></i>
         </div>
-        <h2 class="text-lg font-bold text-white">Welcome to SynapseMem</h2>
+        <h2 class="text-lg font-bold text-white">Welcome to SynapseMem 2.0</h2>
         <p class="text-xs text-slate-400">Select your team workspace and user profile to enter.</p>
       </div>
 
@@ -562,6 +563,10 @@
               <option value="expired">Expired</option>
             </select>
           </div>
+        </div>
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Valid Until / Expiry Date (Optional)</label>
+          <input type="datetime-local" id="form-valid-until" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
         </div>
         <div class="flex justify-end space-x-2 pt-2 border-t border-slate-800">
           <button type="button" id="modal-cancel-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Cancel</button>
