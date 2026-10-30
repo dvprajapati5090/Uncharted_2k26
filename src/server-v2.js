@@ -39,6 +39,12 @@ import {
 } from './memory-engine-v2.js';
 import { recallMemories } from './recall-engine-v2.js';
 import { embedDocuments } from './providers/embedding-provider.js';
+import {
+  evaluateMemoryConsensus,
+  getConsensusHistory,
+  getConsensusStats,
+  AGENT_PERSONAS
+} from './consensus-engine-v2.js';
 
 validateConfig();
 
@@ -497,6 +503,35 @@ const server = http.createServer(async (req, res) => {
       const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
       const searchResult = await searchHierarchicalMemories({ query: q, workspaceId });
       return sendJson(res, 200, searchResult);
+    }
+
+    // ----------------------------------------------------
+    // 6.10. MULTI-AGENT CONSENSUS & QUORUM VALIDATION API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/consensus') {
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const history = await getConsensusHistory(workspaceId);
+      const stats = await getConsensusStats(workspaceId);
+      return sendJson(res, 200, {
+        history,
+        stats,
+        personas: AGENT_PERSONAS
+      });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/consensus/evaluate') {
+      const body = await parseBody(req);
+      const candidate = {
+        content: { statement: body.statement },
+        topic: body.topic || 'Infrastructure',
+        ownerId: body.proposer || 'u_sarah',
+        workspaceId: body.workspaceId || 'ws_core'
+      };
+      const result = await evaluateMemoryConsensus(candidate, {
+        proposer: body.proposer || 'u_sarah',
+        workspaceId: body.workspaceId || 'ws_core'
+      });
+      return sendJson(res, 201, result);
     }
 
     // ----------------------------------------------------
