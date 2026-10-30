@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node src/server-v2.js",
     "dev": "node --watch src/server-v2.js",
+    "dev:client": "cd client && npm run dev",
+    "build:client": "cd client && npm run build && node -e \"require('fs').cpSync('client/dist', 'public', {recursive: true, force: true})\"",
     "test": "node src/test-suite-v2.js",
     "test:atlas": "node src/atlas-integration-test.js"
   },
@@ -15,8 +17,8 @@
     "mongodb-atlas",
     "vector-search",
     "voyage-ai",
-    "ai-agents",
-    "memory-operating-system"
+    "react-vite",
+    "ai-agents"
   ],
   "author": "SynapseMem Core Team",
   "license": "MIT",

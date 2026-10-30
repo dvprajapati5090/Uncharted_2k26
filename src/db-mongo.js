@@ -281,15 +281,25 @@ export async function executeAtlasVectorSearch({
   }
 
   // Resilient fallback: performs exact cosine calculation over candidate documents
-  let candidates = Array.from(memoryStore.memories.values());
-  if (filter.status) {
-    candidates = candidates.filter(c => c.status === filter.status);
-  }
-  if (filter.workspaceId) {
-    candidates = candidates.filter(c => c.workspaceId === filter.workspaceId);
-  }
-  if (filter.ownerId) {
-    candidates = candidates.filter(c => c.ownerId === filter.ownerId);
+  let candidates = [];
+  if (db && isConnected) {
+    const col = db.collection(config.mongodb.memoriesCollection);
+    const dbFilter = {};
+    if (filter.status) dbFilter.status = filter.status;
+    if (filter.workspaceId) dbFilter.workspaceId = filter.workspaceId;
+    if (filter.ownerId) dbFilter.ownerId = filter.ownerId;
+    candidates = await col.find(dbFilter).toArray();
+  } else {
+    candidates = Array.from(memoryStore.memories.values());
+    if (filter.status) {
+      candidates = candidates.filter(c => c.status === filter.status);
+    }
+    if (filter.workspaceId) {
+      candidates = candidates.filter(c => c.workspaceId === filter.workspaceId);
+    }
+    if (filter.ownerId) {
+      candidates = candidates.filter(c => c.ownerId === filter.ownerId);
+    }
   }
 
   const scored = candidates.map(c => {
@@ -320,6 +330,33 @@ export async function executeAtlasVectorSearch({
   return scored.slice(0, limit);
 }
 
+// In-memory conversation store for team channels
+const conversationStore = [];
+
+export async function insertMessage(msg) {
+  if (db && isConnected) {
+    try {
+      await db.collection('conversations').insertOne(msg);
+      return msg;
+    } catch (e) {}
+  }
+  conversationStore.push(msg);
+  return msg;
+}
+
+export async function getMessages(channel, workspaceId) {
+  if (db && isConnected) {
+    try {
+      const msgs = await db.collection('conversations')
+        .find({ channel, workspaceId })
+        .sort({ timestamp: 1 })
+        .toArray();
+      if (msgs.length > 0) return msgs;
+    } catch (e) {}
+  }
+  return conversationStore.filter(m => m.channel === channel && (!workspaceId || m.workspaceId === workspaceId));
+}
+
 // User & Workspace queries
 export function getAllUsers() {
   initDefaultData();
@@ -340,8 +377,16 @@ export function getChannels() {
   return memoryStore.channels;
 }
 
-export function wipeAllStoredData() {
+export async function wipeAllStoredData() {
+  if (db && isConnected) {
+    try {
+      await db.collection(config.mongodb.memoriesCollection).deleteMany({});
+      await db.collection(config.mongodb.eventsCollection).deleteMany({});
+      await db.collection('conversations').deleteMany({});
+    } catch (e) {}
+  }
   memoryStore.memories.clear();
   memoryStore.events = [];
+  conversationStore.length = 0;
   initDefaultData();
 }

@@ -16,7 +16,9 @@ import {
   getUserById,
   getAllWorkspaces,
   getChannels,
-  wipeAllStoredData
+  wipeAllStoredData,
+  insertMessage,
+  getMessages
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -148,6 +150,13 @@ const server = http.createServer(async (req, res) => {
     // ----------------------------------------------------
     // 3. CHANNEL MESSAGES & INTELLIGENT EXTRACTION
     // ----------------------------------------------------
+    if (req.method === 'GET' && pathname.startsWith('/api/channels/') && pathname.endsWith('/messages')) {
+      const channel = pathname.split('/')[3];
+      const workspaceId = parsedUrl.searchParams.get('teamId') || 'ws_core';
+      const messages = await getMessages(channel, workspaceId);
+      return sendJson(res, 200, messages);
+    }
+
     if (req.method === 'POST' && pathname.startsWith('/api/channels/') && pathname.endsWith('/messages')) {
       const channel = pathname.split('/')[3];
       const body = await parseBody(req);
@@ -200,8 +209,15 @@ const server = http.createServer(async (req, res) => {
         text,
         timestamp: getAppNow().toISOString(),
         is_assistant: false,
-        memories_extracted: extractedResult.extracted ? [extractedResult.extracted._id.toString()] : []
+        memories_extracted: extractedResult.extracted ? [extractedResult.extracted._id.toString()] : [],
+        workspaceId
       };
+      await insertMessage(userMsg);
+
+      if (assistantMessage) {
+        assistantMessage.workspaceId = workspaceId;
+        await insertMessage(assistantMessage);
+      }
 
       return sendJson(res, 201, {
         userMessage: userMsg,
