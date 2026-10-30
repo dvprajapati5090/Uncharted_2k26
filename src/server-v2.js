@@ -786,6 +786,33 @@ function formatMemoryForUI(mem) {
 // Start Server
 async function start() {
   await initMongo();
+  try {
+    const existing = await findMemories({ workspaceId: 'ws_core' });
+    if (existing.length < 2) {
+      console.log('[Startup] Auto-seeding foundational team architectural directives into MongoDB...');
+      await extractAndFormMemory({
+        text: 'For Project Atlas, we use Node.js, Express and MongoDB Atlas.',
+        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+        workspaceId: 'ws_core',
+        channel: 'architecture'
+      });
+      await extractAndFormMemory({
+        text: 'Do not introduce Redis or paid infrastructure without approval.',
+        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+        workspaceId: 'ws_core',
+        channel: 'architecture'
+      });
+      await extractAndFormMemory({
+        text: 'No production deployments until November 5, 2026.',
+        user: { id: 'u_marcus', name: 'Marcus Chen' },
+        workspaceId: 'ws_core',
+        channel: 'sprint-planning'
+      });
+    }
+  } catch (err) {
+    console.warn('[Startup] Memory auto-seed check note:', err.message);
+  }
+
   server.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🧠 SynapseMem 2.0 (MongoDB Atlas Engine) on http://localhost:${PORT}`);
