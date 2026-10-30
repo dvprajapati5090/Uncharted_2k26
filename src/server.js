@@ -19,7 +19,13 @@ import {
   deleteCodeTask,
   getCodingStats,
   clearAllCodeTasks,
-  wipeAllData
+  wipeAllData,
+  createTeam,
+  getAllTeams,
+  getTeamById,
+  createUser,
+  getUsersByTeam,
+  getUserById
 } from './db.js';
 import {
   processMessageForMemory,
@@ -119,6 +125,33 @@ const server = http.createServer(async (req, res) => {
     // API ROUTES
     // ----------------------------------------------------
 
+    // 0. Teams & User Endpoints
+    if (req.method === 'GET' && pathname === '/api/teams') {
+      const teams = getAllTeams();
+      return sendJson(res, 200, teams);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/teams') {
+      const body = await parseBody(req);
+      if (!body.name) return sendJson(res, 400, { error: 'Team name is required' });
+      const team = createTeam(body.name, body.description || '');
+      return sendJson(res, 201, team);
+    }
+
+    if (req.method === 'GET' && pathname.startsWith('/api/teams/') && pathname.endsWith('/users')) {
+      const teamId = pathname.split('/')[3];
+      const users = getUsersByTeam(teamId);
+      return sendJson(res, 200, users);
+    }
+
+    if (req.method === 'POST' && pathname.startsWith('/api/teams/') && pathname.endsWith('/users')) {
+      const teamId = pathname.split('/')[3];
+      const body = await parseBody(req);
+      if (!body.name) return sendJson(res, 400, { error: 'User name is required' });
+      const user = createUser(teamId, body.name, body.role || 'Developer');
+      return sendJson(res, 201, user);
+    }
+
     // 1. GET /api/channels
     if (req.method === 'GET' && pathname === '/api/channels') {
       const channels = getChannels();
@@ -128,7 +161,8 @@ const server = http.createServer(async (req, res) => {
     // 2. GET /api/channels/:channel/messages
     if (req.method === 'GET' && pathname.startsWith('/api/channels/') && pathname.endsWith('/messages')) {
       const channel = pathname.split('/')[3];
-      const messages = getChannelMessages(channel);
+      const teamId = parsedUrl.searchParams.get('teamId') || 'team_engineering';
+      const messages = getChannelMessages(channel, teamId);
       return sendJson(res, 200, messages);
     }
 
@@ -138,6 +172,7 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const text = (body.text || '').trim();
       const sender = body.sender || 'User';
+      const teamId = body.teamId || 'team_engineering';
 
       if (!text) {
         return sendJson(res, 400, { error: 'Message text is required' });
@@ -155,11 +190,15 @@ const server = http.createServer(async (req, res) => {
         sender_role: 'team',
         text,
         timestamp: getCurrentTime().toISOString(),
-        is_assistant: false
+        is_assistant: false,
+        team_id: teamId
       };
 
       // 1. Check for memory extraction from this message
       const memoryResult = processMessageForMemory(text, sender, channel);
+      if (memoryResult.extracted) {
+        memoryResult.extracted.team_id = teamId;
+      }
       userMsg.memories_extracted = memoryResult.extracted ? [memoryResult.extracted.id] : [];
       insertConversationMessage(userMsg);
 
@@ -167,7 +206,7 @@ const server = http.createServer(async (req, res) => {
 
       // 2. If it's a query or in ask-assistant channel, trigger Recall Engine
       if (isDirectQuery && !memoryResult.extracted) {
-        const recallResult = await recallFromMemory(text);
+        const recallResult = await recallFromMemory(text, { teamId });
 
         assistantReply = {
           id: `msg_asst_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
@@ -178,7 +217,8 @@ const server = http.createServer(async (req, res) => {
           timestamp: new Date(getCurrentTime().getTime() + 500).toISOString(),
           is_assistant: true,
           inspection_data: recallResult.inspection,
-          memories_extracted: recallResult.selectedMemories.map(m => m.id)
+          memories_extracted: recallResult.selectedMemories.map(m => m.id),
+          team_id: teamId
         };
 
         insertConversationMessage(assistantReply);
@@ -198,7 +238,8 @@ const server = http.createServer(async (req, res) => {
       const status = parsedUrl.searchParams.get('status') || 'all';
       const topic = parsedUrl.searchParams.get('topic') || '';
       const type = parsedUrl.searchParams.get('type') || '';
-      const memories = getAllMemories({ status, topic, type });
+      const teamId = parsedUrl.searchParams.get('teamId') || null;
+      const memories = getAllMemories({ status, topic, type, team_id: teamId });
       return sendJson(res, 200, memories);
     }
 
@@ -337,7 +378,7 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Prompt is required' });
       }
 
-      const analysis = checkPromptCollision(candidateId, prompt);
+      const analysis = checkPromptCollision(candidateId, prompt, { teamId: body.teamId || null });
       return sendJson(res, 200, analysis);
     }
 
@@ -347,12 +388,13 @@ const server = http.createServer(async (req, res) => {
       const prompt = (body.prompt || '').trim();
       const candidateId = body.candidateId || 'Candidate A';
       const candidateRole = body.candidateRole || 'Developer';
+      const teamId = body.teamId || 'team_engineering';
 
       if (!prompt) {
         return sendJson(res, 400, { error: 'Prompt is required' });
       }
 
-      const result = claimAndExecuteTask(candidateId, prompt, { candidateRole, status: body.status });
+      const result = claimAndExecuteTask(candidateId, prompt, { candidateRole, status: body.status, teamId });
       return sendJson(res, 201, result);
     }
 
@@ -362,12 +404,13 @@ const server = http.createServer(async (req, res) => {
       const candidateId = body.candidateId || 'Candidate B';
       const existingTaskId = body.existingTaskId;
       const currentPrompt = body.currentPrompt;
+      const teamId = body.teamId || 'team_engineering';
 
       if (!existingTaskId) {
         return sendJson(res, 400, { error: 'existingTaskId is required' });
       }
 
-      const result = adoptExistingTask(candidateId, existingTaskId, currentPrompt);
+      const result = adoptExistingTask(candidateId, existingTaskId, currentPrompt, { teamId });
       return sendJson(res, 200, result);
     }
 
@@ -375,13 +418,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && pathname === '/api/coding/tasks') {
       const status = parsedUrl.searchParams.get('status');
       const candidateId = parsedUrl.searchParams.get('candidateId');
-      const tasks = getAllCodeTasks({ status, candidateId });
+      const teamId = parsedUrl.searchParams.get('teamId') || null;
+      const tasks = getAllCodeTasks({ status, candidateId, team_id: teamId });
       return sendJson(res, 200, tasks);
     }
 
     // 18. GET /api/coding/stats (Token savings meter & collision prevention metrics)
     if (req.method === 'GET' && pathname === '/api/coding/stats') {
-      const stats = getCodingStats();
+      const teamId = parsedUrl.searchParams.get('teamId') || null;
+      const stats = getCodingStats(teamId);
       return sendJson(res, 200, stats);
     }
 

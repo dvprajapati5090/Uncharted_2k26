@@ -175,7 +175,7 @@ export function summarizeIntent(prompt) {
  * Compare incoming candidate prompt against active and past tasks
  * Evaluates semantic collision, file collision, and token saving potential
  */
-export function checkPromptCollision(candidateId, prompt) {
+export function checkPromptCollision(candidateId, prompt, options = {}) {
   if (!prompt || prompt.trim().length < 5) {
     return { error: 'Prompt must be at least 5 characters' };
   }
@@ -183,7 +183,7 @@ export function checkPromptCollision(candidateId, prompt) {
   const queryVector = generateEmbedding(prompt);
   const qTokens = filterKeywords(tokenize(prompt));
   const proposedFiles = inferTargetFiles(prompt);
-  const allTasks = getAllCodeTasks();
+  const allTasks = getAllCodeTasks({ team_id: options.teamId || null });
 
   const activeTasks = allTasks.filter(t => t.status === 'in_progress');
   const pastTasks = allTasks.filter(t => t.status === 'completed' || t.status === 'deduplicated');
@@ -342,7 +342,8 @@ export function claimAndExecuteTask(candidateId, prompt, options = {}) {
     created_at: new Date().toISOString(),
     completed_at: null,
     result_code: resultCode,
-    vector
+    vector,
+    team_id: options.teamId || 'team_engineering'
   };
 
   const saved = insertCodeTask(taskRecord);

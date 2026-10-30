@@ -111,6 +111,34 @@ function initTables(db) {
     );
   `);
 
+  // 7. Teams Table (Multi-tenant workspaces)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // 8. Users Table (Team members & candidates)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'Developer',
+      avatar TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // Safely add team_id to existing tables if missing
+  try { db.exec("ALTER TABLE memories ADD COLUMN team_id TEXT DEFAULT 'team_engineering'"); } catch(e) {}
+  try { db.exec("ALTER TABLE conversations ADD COLUMN team_id TEXT DEFAULT 'team_engineering'"); } catch(e) {}
+  try { db.exec("ALTER TABLE code_tasks ADD COLUMN team_id TEXT DEFAULT 'team_engineering'"); } catch(e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN team_id TEXT DEFAULT 'team_engineering'"); } catch(e) {}
+
   // Initialize default channels if not exists
   const channelCount = db.prepare('SELECT count(*) as count FROM channels').get().count;
   if (channelCount === 0) {
@@ -118,6 +146,24 @@ function initTables(db) {
     insertChannel.run('architecture', '#architecture', 'Technical design and stack decisions');
     insertChannel.run('sprint-planning', '#sprint-planning', 'Sprint priorities, deadlines, and assumptions');
     insertChannel.run('ask-assistant', '#ask-assistant', 'Query team memory across sessions');
+  }
+
+  // Initialize default teams and users if none exist
+  const teamCount = db.prepare('SELECT count(*) as count FROM teams').get().count;
+  if (teamCount === 0) {
+    const insertTeam = db.prepare('INSERT INTO teams (id, name, description, created_at) VALUES (?, ?, ?, ?)');
+    const now = new Date().toISOString();
+    insertTeam.run('team_engineering', 'Apollo Core Engineering', 'Backend, frontend, and infra team', now);
+    insertTeam.run('team_hackathon', 'Alpha Hackathon Squad', 'Rapid prototyping and candidate sprint', now);
+
+    const insertUser = db.prepare('INSERT INTO users (id, team_id, name, role, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+    insertUser.run('u_sarah', 'team_engineering', 'Sarah Jenkins', 'Tech Lead', 'SJ', now);
+    insertUser.run('u_alex', 'team_engineering', 'Alex Rivera', 'Backend Dev', 'AR', now);
+    insertUser.run('u_marcus', 'team_engineering', 'Marcus Chen', 'Product Manager', 'MC', now);
+    insertUser.run('u_elena', 'team_engineering', 'Elena Rostova', 'Frontend Dev', 'ER', now);
+
+    insertUser.run('u_cand_a', 'team_hackathon', 'Candidate A', 'Backend Candidate', 'CA', now);
+    insertUser.run('u_cand_b', 'team_hackathon', 'Candidate B', 'Fullstack Candidate', 'CB', now);
   }
 
   // Set default simulated date if not exists (Oct 30, 2026)
@@ -134,11 +180,11 @@ export function insertMemory(memory) {
     INSERT INTO memories (
       id, topic, decision, reason, owner, created_at, updated_at,
       type, status, valid_until, superseded_by, supersedes_id,
-      confidence, source_message, channel, tags, vector
+      confidence, source_message, channel, tags, vector, team_id
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?
     )
   `);
 
@@ -159,7 +205,8 @@ export function insertMemory(memory) {
     memory.source_message || '',
     memory.channel || 'general',
     JSON.stringify(memory.tags || []),
-    typeof memory.vector === 'string' ? memory.vector : JSON.stringify(memory.vector || [])
+    typeof memory.vector === 'string' ? memory.vector : JSON.stringify(memory.vector || []),
+    memory.team_id || 'team_engineering'
   );
 
   logAudit('CREATE', memory.id, `Created memory on topic "${memory.topic}": ${memory.decision}`);
@@ -228,6 +275,11 @@ export function getAllMemories(filters = {}) {
   let sql = 'SELECT * FROM memories WHERE 1=1';
   const params = [];
 
+  if (filters.team_id) {
+    sql += ' AND (team_id = ? OR team_id IS NULL)';
+    params.push(filters.team_id);
+  }
+
   if (filters.status && filters.status !== 'all') {
     sql += ' AND status = ?';
     params.push(filters.status);
@@ -289,8 +341,8 @@ export function insertConversationMessage(msg) {
   const stmt = db.prepare(`
     INSERT INTO conversations (
       id, channel, sender, sender_role, text, timestamp,
-      memories_extracted, is_assistant, inspection_data
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      memories_extracted, is_assistant, inspection_data, team_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -302,21 +354,66 @@ export function insertConversationMessage(msg) {
     msg.timestamp || new Date().toISOString(),
     JSON.stringify(msg.memories_extracted || []),
     msg.is_assistant ? 1 : 0,
-    msg.inspection_data ? JSON.stringify(msg.inspection_data) : null
+    msg.inspection_data ? JSON.stringify(msg.inspection_data) : null,
+    msg.team_id || 'team_engineering'
   );
 
   return msg;
 }
 
-export function getChannelMessages(channel) {
+export function getChannelMessages(channel, teamId = 'team_engineering') {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM conversations WHERE channel = ? ORDER BY timestamp ASC').all(channel);
+  const rows = db.prepare('SELECT * FROM conversations WHERE channel = ? AND (team_id = ? OR team_id IS NULL) ORDER BY timestamp ASC').all(channel, teamId);
   return rows.map(row => ({
     ...row,
     memories_extracted: JSON.parse(row.memories_extracted || '[]'),
     inspection_data: row.inspection_data ? JSON.parse(row.inspection_data) : null,
     is_assistant: Boolean(row.is_assistant)
   }));
+}
+
+// ----------------------------------------------------
+// Team & User Workspace Operations
+// ----------------------------------------------------
+export function createTeam(name, description = '') {
+  const db = getDb();
+  const id = `team_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  db.prepare(`
+    INSERT INTO teams (id, name, description, created_at)
+    VALUES (?, ?, ?, ?)
+  `).run(id, name, description, new Date().toISOString());
+  return getTeamById(id);
+}
+
+export function getAllTeams() {
+  const db = getDb();
+  return db.prepare('SELECT * FROM teams ORDER BY created_at ASC').all();
+}
+
+export function getTeamById(id) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM teams WHERE id = ?').get(id) || null;
+}
+
+export function createUser(teamId, name, role = 'Developer') {
+  const db = getDb();
+  const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const avatar = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U';
+  db.prepare(`
+    INSERT INTO users (id, team_id, name, role, avatar, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, teamId, name, role, avatar, new Date().toISOString());
+  return getUserById(id);
+}
+
+export function getUsersByTeam(teamId) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE team_id = ? ORDER BY created_at ASC').all(teamId);
+}
+
+export function getUserById(id) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) || null;
 }
 
 // Channels
@@ -375,12 +472,12 @@ export function insertCodeTask(task) {
       id, candidate_id, candidate_role, prompt, intent_summary,
       target_files, status, tokens_estimated, tokens_saved,
       matched_task_id, similarity_score, created_at, completed_at,
-      result_code, vector
+      result_code, vector, team_id
     ) VALUES (
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?
+      ?, ?, ?
     )
   `);
 
@@ -399,7 +496,8 @@ export function insertCodeTask(task) {
     task.created_at || new Date().toISOString(),
     task.completed_at || null,
     task.result_code || '',
-    typeof task.vector === 'string' ? task.vector : JSON.stringify(task.vector || [])
+    typeof task.vector === 'string' ? task.vector : JSON.stringify(task.vector || []),
+    task.team_id || 'team_engineering'
   );
 
   return getCodeTaskById(task.id);
@@ -465,6 +563,11 @@ export function getAllCodeTasks(filters = {}) {
   let sql = 'SELECT * FROM code_tasks WHERE 1=1';
   const params = [];
 
+  if (filters.team_id) {
+    sql += ' AND (team_id = ? OR team_id IS NULL)';
+    params.push(filters.team_id);
+  }
+
   if (filters.candidate_id) {
     sql += ' AND candidate_id = ?';
     params.push(filters.candidate_id);
@@ -492,9 +595,15 @@ export function clearAllCodeTasks() {
   db.exec('DELETE FROM code_tasks;');
 }
 
-export function getCodingStats() {
+export function getCodingStats(teamId = null) {
   const db = getDb();
-  const tasks = db.prepare('SELECT * FROM code_tasks').all();
+  let sql = 'SELECT * FROM code_tasks WHERE 1=1';
+  const params = [];
+  if (teamId) {
+    sql += ' AND (team_id = ? OR team_id IS NULL)';
+    params.push(teamId);
+  }
+  const tasks = db.prepare(sql).all(...params);
   
   let totalTokensUsed = 0;
   let totalTokensSaved = 0;

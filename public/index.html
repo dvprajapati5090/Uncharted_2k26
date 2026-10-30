@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SynapseMem — Memory-Powered Team Assistant</title>
+  <title>SynapseMem — Team Memory & Chatbot</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -17,12 +17,9 @@
         extend: {
           colors: {
             brand: {
-              50: '#eef2ff',
-              100: '#e0e7ff',
               500: '#6366f1',
               600: '#4f46e5',
-              700: '#4338ca',
-              900: '#312e81'
+              700: '#4338ca'
             }
           }
         }
@@ -30,392 +27,314 @@
     }
   </script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased overflow-hidden">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased overflow-hidden">
 
-  <!-- Top Global Header -->
-  <header class="h-14 border-b border-slate-800 bg-slate-950/80 backdrop-blur px-4 flex items-center justify-between z-20">
+  <!-- ---------------------------------------------------- -->
+  <!-- 1. Minimalist Uncluttered Header                     -->
+  <!-- ---------------------------------------------------- -->
+  <header class="h-13 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between z-20 shrink-0">
+    <!-- Left: Brand + Team Switcher Pill -->
     <div class="flex items-center space-x-3">
-      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-        <i data-lucide="brain-circuit" class="w-5 h-5"></i>
+      <div class="flex items-center space-x-2">
+        <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <i data-lucide="brain-circuit" class="w-4 h-4"></i>
+        </div>
+        <span class="text-sm font-bold tracking-tight text-white hidden sm:inline">SynapseMem</span>
       </div>
-      <div>
-        <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-          SynapseMem
-          <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-700/50">Team Memory Assistant</span>
-        </h1>
-        <p class="text-[11px] text-slate-400">Remembers • Recalls • Keeps Memory Honest • Explains Itself</p>
+
+      <!-- Current Team Pill & Switcher -->
+      <div class="relative">
+        <button id="team-dropdown-btn" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition">
+          <i data-lucide="building-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span id="header-team-name">Core Engineering</span>
+          <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 ml-0.5"></i>
+        </button>
+
+        <!-- Team Switcher Dropdown Menu -->
+        <div id="team-dropdown-menu" class="absolute left-0 mt-1.5 w-60 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1 text-xs z-50 hidden">
+          <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">Switch Team Workspace</div>
+          <div id="team-menu-list" class="max-h-48 overflow-y-auto space-y-0.5 px-1">
+            <!-- Dynamic teams injected here -->
+          </div>
+          <div class="border-t border-slate-800 mt-1 pt-1 px-1">
+            <button id="btn-create-team-modal" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-indigo-400 font-medium flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Create New Team
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Quick Scenario Buttons -->
-    <div class="hidden md:flex items-center space-x-2">
-      <span class="text-xs text-slate-400 font-medium mr-1 flex items-center gap-1">
-        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i> Demos:
-      </span>
-      <button id="btn-scenario-db" class="scenario-btn px-2.5 py-1 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5" title="Demonstrate decision extraction, superseding Postgres with MongoDB, and recall">
-        <i data-lucide="database" class="w-3.5 h-3.5 text-emerald-400"></i> Postgres ➔ Mongo
+    <!-- Center: Clean Segmented View Tabs -->
+    <nav class="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800/80 text-xs">
+      <button id="tab-chat-btn" class="px-3.5 py-1 rounded-md font-semibold text-white bg-indigo-600 flex items-center gap-1.5 transition shadow-sm">
+        <i data-lucide="bot" class="w-3.5 h-3.5 text-indigo-200"></i> Chatbot
       </button>
-      <button id="btn-scenario-expiry" class="scenario-btn px-2.5 py-1 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5" title="Demonstrate temporal assumption expiry for Friday demo">
-        <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-400"></i> Demo Expiry
-      </button>
-      <button id="btn-scenario-token-guard" class="scenario-btn px-2.5 py-1 text-xs rounded-md bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border border-emerald-700/50 transition flex items-center gap-1.5" title="Demonstrate Candidate A & B Collision Prevention and Token Savings">
-        <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-emerald-400"></i> Token Guard Demo
-      </button>
-      <button id="btn-seed-reset" class="scenario-btn px-2.5 py-1 text-xs rounded-md bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 transition flex items-center gap-1.5" title="Wipe all data and start completely fresh from scratch">
-        <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-400"></i> Clear All Data
-      </button>
-    </div>
-
-    <!-- Time Machine Bar -->
-    <div class="flex items-center space-x-3 bg-slate-900/80 px-3 py-1 rounded-lg border border-slate-800 text-xs">
-      <div class="flex items-center space-x-1.5 text-amber-400 font-medium">
-        <i data-lucide="history" class="w-4 h-4"></i>
-        <span>Time:</span>
-      </div>
-      <span id="current-sim-time-display" class="font-mono text-slate-200 font-semibold">Oct 30, 2026</span>
-      <div class="flex items-center space-x-1 border-l border-slate-700 pl-2">
-        <button id="time-today-btn" class="px-2 py-0.5 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300">Today</button>
-        <button id="time-nextweek-btn" class="px-2 py-0.5 rounded text-[11px] bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-300 font-medium" title="Advance time 7 days past Friday to trigger demo expiration">+7d (Expire Demo)</button>
-      </div>
-    </div>
-
-    <!-- View Mode Switcher -->
-    <div class="flex items-center space-x-2">
-      <button id="tab-chat-btn" class="px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600 text-white flex items-center gap-1.5 shadow">
-        <i data-lucide="messages-square" class="w-3.5 h-3.5"></i> Chat Sessions
-      </button>
-      <button id="tab-coding-btn" class="px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5" title="Team Coding & Prompt Deduplication Guard">
-        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Token Guard
-        <span id="tokens-saved-nav-badge" class="px-1.5 py-0.2 bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] rounded-full font-bold">0 Tokens Saved</span>
-      </button>
-      <button id="tab-ledger-btn" class="px-3 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5">
+      <button id="tab-ledger-btn" class="px-3.5 py-1 rounded-md font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
         <i data-lucide="database" class="w-3.5 h-3.5"></i> Memory Ledger
-        <span id="memory-count-badge" class="px-1.5 py-0.2 bg-indigo-900 text-indigo-200 text-[10px] rounded-full font-bold">0</span>
+        <span id="memory-count-badge" class="px-1.5 py-0.2 bg-slate-800 text-slate-300 text-[10px] rounded-full font-bold">0</span>
       </button>
-      <button id="toggle-inspect-drawer-btn" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5" title="Toggle Inspect Panel">
-        <i data-lucide="scan-eye" class="w-4 h-4 text-indigo-400"></i>
-        <span class="hidden sm:inline">Inspect Panel</span>
+      <button id="tab-coding-btn" class="px-3.5 py-1 rounded-md font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Token Guard
       </button>
+    </nav>
+
+    <!-- Right: Active User Pill + Actions Menu -->
+    <div class="flex items-center space-x-2">
+      <!-- Active User Profile Pill -->
+      <div class="relative">
+        <button id="user-dropdown-btn" class="flex items-center space-x-2 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs transition">
+          <div id="header-user-avatar" class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px]">
+            SJ
+          </div>
+          <div class="text-left hidden md:block">
+            <span id="header-user-name" class="font-bold text-slate-200 block leading-tight">Sarah Jenkins</span>
+            <span id="header-user-role" class="text-[10px] text-slate-400 block leading-tight">Tech Lead</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
+        </button>
+
+        <!-- User Menu Dropdown -->
+        <div id="user-dropdown-menu" class="absolute right-0 mt-1.5 w-56 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1 text-xs z-50 hidden">
+          <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">Switch User</div>
+          <div id="user-menu-list" class="max-h-48 overflow-y-auto space-y-0.5 px-1">
+            <!-- Dynamic users in current team injected here -->
+          </div>
+          <div class="border-t border-slate-800 mt-1 pt-1 px-1">
+            <button id="btn-add-user-modal" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-indigo-400 font-medium flex items-center gap-1.5">
+              <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Add Member to Team
+            </button>
+            <button id="btn-logout" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-rose-950/60 text-rose-400 font-medium flex items-center gap-1.5">
+              <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Switch Workspace / Logout
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inspect Panel Toggle -->
+      <button id="toggle-inspect-drawer-btn" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60 flex items-center gap-1.5 transition" title="Toggle Inspect Retrieval Drawer">
+        <i data-lucide="scan-eye" class="w-3.5 h-3.5 text-indigo-400"></i>
+        <span class="hidden sm:inline">Inspect</span>
+      </button>
+
+      <!-- Settings / Clear Menu Button -->
+      <div class="relative">
+        <button id="more-options-btn" class="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition" title="More Options">
+          <i data-lucide="more-vertical" class="w-3.5 h-3.5"></i>
+        </button>
+
+        <div id="more-options-menu" class="absolute right-0 mt-1.5 w-48 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1 text-xs z-50 hidden">
+          <button id="btn-open-time-machine" class="w-full text-left px-3 py-1.5 hover:bg-slate-800 text-slate-300 flex items-center gap-2">
+            <i data-lucide="history" class="w-3.5 h-3.5 text-amber-400"></i> Time Machine Simulator
+          </button>
+          <div class="border-t border-slate-800 my-1"></div>
+          <button id="btn-seed-reset" class="w-full text-left px-3 py-1.5 hover:bg-rose-950/60 text-rose-400 flex items-center gap-2">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear All Data
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- Main Container -->
+  <!-- ---------------------------------------------------- -->
+  <!-- 2. Main Workspace Container                          -->
+  <!-- ---------------------------------------------------- -->
   <div class="flex-1 flex overflow-hidden relative">
 
-    <!-- Left Sidebar: Channels & Sessions -->
-    <aside class="w-64 border-r border-slate-800 bg-slate-950/50 flex flex-col shrink-0">
-      <div class="p-3 border-b border-slate-800/80 flex items-center justify-between">
-        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Team Channels</span>
-        <span class="text-[11px] text-slate-500">Live Simulation</span>
-      </div>
-
-      <nav id="channel-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-        <!-- Rendered dynamically -->
-      </nav>
-
-      <!-- Active Memory Stats Widget -->
-      <div class="p-3 border-t border-slate-800 bg-slate-900/40 text-xs space-y-2">
-        <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-          <span>Memory Health</span>
-          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+    <!-- View A: Clean Chatbot Interface -->
+    <section id="view-chat" class="flex-1 flex overflow-hidden">
+      <!-- Left Sidebar: Channels & AI Assistant -->
+      <aside class="w-56 border-r border-slate-800/80 bg-slate-950/60 flex flex-col shrink-0">
+        <div class="p-3 border-b border-slate-800/80 flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <span>Channels</span>
         </div>
-        <div class="grid grid-cols-3 gap-1.5 text-center">
-          <div class="bg-emerald-950/40 border border-emerald-800/40 rounded p-1.5">
-            <div id="stat-active-count" class="text-sm font-bold text-emerald-400">0</div>
-            <div class="text-[10px] text-emerald-300/80 font-medium">Active</div>
-          </div>
-          <div class="bg-amber-950/40 border border-amber-800/40 rounded p-1.5">
-            <div id="stat-superseded-count" class="text-sm font-bold text-amber-400">0</div>
-            <div class="text-[10px] text-amber-300/80 font-medium">Superseded</div>
-          </div>
-          <div class="bg-rose-950/40 border border-rose-800/40 rounded p-1.5">
-            <div id="stat-expired-count" class="text-sm font-bold text-rose-400">0</div>
-            <div class="text-[10px] text-rose-300/80 font-medium">Expired</div>
-          </div>
-        </div>
-        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1">
-          <span>Zero Chat Noise Grounding</span>
-          <span class="text-emerald-400 font-semibold">100%</span>
-        </div>
-      </div>
-    </aside>
 
-    <!-- Center View: Chat Session or Memory Ledger -->
-    <main class="flex-1 flex flex-col overflow-hidden bg-slate-900">
+        <nav id="channel-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+          <!-- Rendered dynamically -->
+        </nav>
 
-      <!-- View A: Chat Interface -->
-      <section id="view-chat" class="flex-1 flex flex-col overflow-hidden">
-        <!-- Channel Header -->
-        <div class="h-12 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/50">
+        <!-- Discreet Memory Health Pill -->
+        <div class="p-3 border-t border-slate-800/80 bg-slate-900/30 text-[11px] text-slate-400 flex items-center justify-between">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Memory Health
+          </span>
+          <span id="stat-active-count" class="font-bold text-emerald-400">0 Active</span>
+        </div>
+      </aside>
+
+      <!-- Center: Chat Conversation Stream -->
+      <div class="flex-1 flex flex-col overflow-hidden bg-slate-900/50">
+        <!-- Channel Top Bar -->
+        <div class="h-11 border-b border-slate-800/80 px-4 flex items-center justify-between bg-slate-900/40">
           <div class="flex items-center space-x-2">
-            <span id="active-channel-icon" class="text-indigo-400 font-bold">#</span>
-            <span id="active-channel-name" class="font-bold text-sm text-slate-200">architecture</span>
-            <span id="active-channel-desc" class="text-xs text-slate-400 border-l border-slate-700 pl-2">Technical design and stack decisions</span>
+            <span id="active-channel-icon" class="text-indigo-400 font-bold text-xs">#</span>
+            <span id="active-channel-name" class="font-bold text-xs text-slate-200">architecture</span>
+            <span id="active-channel-desc" class="text-[11px] text-slate-400 border-l border-slate-700/60 pl-2 hidden sm:inline">Technical design & stack decisions</span>
           </div>
 
-          <div class="flex items-center space-x-2 text-xs">
-            <!-- Fast Fill Buttons for Testing -->
-            <span class="text-slate-500 font-medium hidden lg:inline">Quick Try:</span>
-            <button class="quick-prompt-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px]" data-text="We’re using Postgres because the team knows SQL">
-              "We're using Postgres..."
-            </button>
-            <button class="quick-prompt-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px]" data-text="Actually, we’re switching to MongoDB because we need flexible JSON schema">
-              "Switch to MongoDB..."
-            </button>
-            <button class="quick-prompt-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px]" data-text="What database are we using and why?">
-              "What database are we using?"
-            </button>
+          <div class="text-[11px] text-indigo-400 font-medium flex items-center gap-1">
+            <i data-lucide="sparkles" class="w-3 h-3 text-indigo-400"></i>
+            <span id="channel-mode-hint">Decisions are automatically extracted & stored</span>
           </div>
         </div>
 
-        <!-- Chat Message Scroll Container -->
-        <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
-          <!-- Dynamic messages inserted here -->
+        <!-- Messages Feed -->
+        <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-3">
+          <!-- Rendered messages -->
         </div>
 
         <!-- Chat Input Form -->
-        <div class="p-3 border-t border-slate-800 bg-slate-950/80">
-          <form id="chat-form" class="flex flex-col space-y-2">
-            <div class="flex items-center justify-between text-xs text-slate-400 px-1">
-              <div class="flex items-center space-x-2">
-                <span>Speaking as:</span>
-                <select id="sender-select" class="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500">
-                  <option value="Sarah (Tech Lead)">Sarah (Tech Lead)</option>
-                  <option value="Alex (Backend Dev)">Alex (Backend Dev)</option>
-                  <option value="Marcus (Product Manager)">Marcus (Product Manager)</option>
-                  <option value="Elena (Frontend Dev)">Elena (Frontend Dev)</option>
-                  <option value="You">You</option>
-                </select>
-              </div>
-              <div id="channel-mode-hint" class="text-[11px] text-indigo-400 font-medium">
-                💡 Type decisions to record, or ask questions to recall
-              </div>
-            </div>
-
-            <div class="flex items-center space-x-2">
-              <input
-                id="chat-input"
-                type="text"
-                autocomplete="off"
-                placeholder="Share a team decision (e.g. 'We decided on Redis for caching...') or ask a question..."
-                class="flex-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <button
-                type="submit"
-                class="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm flex items-center space-x-1.5 transition shadow shadow-indigo-600/30"
-              >
-                <span>Send</span>
-                <i data-lucide="send" class="w-4 h-4"></i>
-              </button>
-            </div>
+        <div class="p-3 border-t border-slate-800/80 bg-slate-950/80">
+          <form id="chat-form" class="flex items-center space-x-2">
+            <input
+              id="chat-input"
+              type="text"
+              autocomplete="off"
+              placeholder="Post a decision (e.g. 'We are using Postgres...') or ask a question..."
+              class="flex-1 bg-slate-900 border border-slate-700/80 focus:border-indigo-500 rounded-lg px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+            <button
+              type="submit"
+              class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 transition shadow"
+            >
+              <span>Send</span>
+              <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            </button>
           </form>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <!-- View B: Memory Ledger (Full CRUD & Lineage) -->
-      <section id="view-ledger" class="flex-1 flex flex-col overflow-hidden hidden">
-        <!-- Ledger Header -->
-        <div class="p-4 border-b border-slate-800 bg-slate-900/80 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="text-base font-bold text-white flex items-center gap-2">
-              <i data-lucide="database" class="w-5 h-5 text-indigo-400"></i>
-              Structured Memory Ledger
-            </h2>
-            <p class="text-xs text-slate-400">Verified team decisions and assumptions. No chat transcript clutter.</p>
+    <!-- View B: Structured Memory Ledger -->
+    <section id="view-ledger" class="flex-1 flex flex-col overflow-hidden hidden">
+      <!-- Ledger Header -->
+      <div class="p-3.5 border-b border-slate-800/80 bg-slate-900/40 flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-white flex items-center gap-2">
+            <i data-lucide="database" class="w-4 h-4 text-indigo-400"></i>
+            Structured Memory Ledger
+          </h2>
+          <p class="text-[11px] text-slate-400">Verified team decisions and assumptions. No chat transcript clutter.</p>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <!-- Filter Tabs -->
+          <div class="bg-slate-950 p-1 rounded-lg border border-slate-800 flex text-xs">
+            <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-white bg-indigo-600" data-filter="all">All</button>
+            <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200" data-filter="active">Active</button>
+            <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200" data-filter="superseded">Superseded</button>
+            <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200" data-filter="expired">Expired</button>
+          </div>
+
+          <button id="btn-add-memory-manual" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Decision
+          </button>
+        </div>
+      </div>
+
+      <!-- Ledger Cards Grid -->
+      <div class="flex-1 overflow-y-auto p-4">
+        <div id="memories-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <!-- Rendered cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- View C: Team Coding Guard (Prompt Deduplication) -->
+    <section id="view-coding" class="flex-1 flex flex-col overflow-hidden hidden">
+      <!-- Coding Stats Top Bar -->
+      <div class="p-3 border-b border-slate-800/80 bg-slate-900/40 flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-white flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+            Collaborative Coding & Token Guard
+          </h2>
+          <p class="text-[11px] text-slate-400">Pre-flight prompt comparison prevents duplicate coding and saves token budgets.</p>
+        </div>
+
+        <div class="flex items-center space-x-3 text-xs">
+          <div class="bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-lg text-center">
+            <div id="coding-tokens-saved" class="text-sm font-bold text-emerald-400 font-mono">0</div>
+            <div class="text-[10px] text-emerald-300/80 uppercase font-medium">Tokens Saved</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 px-3 py-1 rounded-lg text-center">
+            <div id="coding-collisions-prevented" class="text-sm font-bold text-indigo-300 font-mono">0</div>
+            <div class="text-[10px] text-slate-400 uppercase font-medium">Collisions Stopped</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2-Column Collaborative Coding Workspace -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- Left: Prompt Dispatcher -->
+        <div class="w-1/2 border-r border-slate-800/80 p-4 flex flex-col space-y-3 overflow-y-auto">
+          <div class="space-y-1">
+            <label class="text-[11px] font-semibold text-slate-300">Prompt / Task Request to AI Assistant</label>
+            <textarea
+              id="coding-prompt-input"
+              rows="3"
+              placeholder="Describe what you want to code (e.g. 'Create PostgreSQL connection pool with retry logic...')"
+              class="w-full bg-slate-900 border border-slate-700/80 focus:border-emerald-500 rounded-lg p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+            ></textarea>
           </div>
 
           <div class="flex items-center space-x-2">
-            <!-- Filter Tabs -->
-            <div class="bg-slate-950 p-1 rounded-lg border border-slate-800 flex text-xs">
-              <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-white bg-indigo-600" data-filter="all">All</button>
-              <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200" data-filter="active">Active</button>
-              <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200" data-filter="superseded">Superseded</button>
-              <button class="ledger-filter-btn px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200" data-filter="expired">Expired</button>
-            </div>
-
-            <button id="btn-add-memory-manual" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition">
-              <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Memory
+            <button id="btn-check-collision" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs flex items-center justify-center gap-1.5 border border-slate-700/80 transition">
+              <i data-lucide="radar" class="w-3.5 h-3.5 text-emerald-400"></i> Check Collision (Pre-Flight)
+            </button>
+            <button id="btn-claim-task" class="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="play" class="w-3.5 h-3.5"></i> Put into Work (Claim)
             </button>
           </div>
-        </div>
 
-        <!-- Ledger Content Area -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-3">
-          <div id="memories-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            <!-- Rendered cards -->
-          </div>
-        </div>
-      </section>
-
-      <!-- View C: Team Coding Guard & Prompt Deduplication -->
-      <section id="view-coding" class="flex-1 flex flex-col overflow-hidden hidden">
-        <!-- Token Economy Stats Header -->
-        <div class="p-3 border-b border-slate-800 bg-slate-950/80 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-bold text-white flex items-center gap-2">
-              <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
-              Collaborative Coding & Token Guard
-              <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold uppercase">Work Allocation Engine</span>
-            </h2>
-            <p class="text-[11px] text-slate-400">Intercepts prompts to prevent Candidate B from duplicating Candidate A's work, saving token budgets and preventing merge conflicts.</p>
-          </div>
-
-          <!-- Token Savings Metrics -->
-          <div class="flex items-center space-x-3 text-xs">
-            <div class="bg-emerald-950/60 border border-emerald-800/80 px-3 py-1.5 rounded-lg text-center">
-              <div id="coding-tokens-saved" class="text-sm font-bold text-emerald-400 font-mono">0</div>
-              <div class="text-[10px] text-emerald-300/80 font-medium uppercase tracking-wider">Tokens Saved</div>
-            </div>
-            <div class="bg-indigo-950/60 border border-indigo-800/80 px-3 py-1.5 rounded-lg text-center">
-              <div id="coding-collisions-prevented" class="text-sm font-bold text-indigo-300 font-mono">0</div>
-              <div class="text-[10px] text-indigo-300/80 font-medium uppercase tracking-wider">Collisions Stopped</div>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-center">
-              <div id="coding-active-claims" class="text-sm font-bold text-amber-400 font-mono">0</div>
-              <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Active File Locks</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 2-Column Split: Prompt Interceptor vs Team Work Board -->
-        <div class="flex-1 flex overflow-hidden">
-          
-          <!-- Left Column: Prompt Interceptor & Collision Radar -->
-          <div class="w-1/2 border-r border-slate-800 p-4 flex flex-col space-y-3 overflow-y-auto">
+          <!-- Collision Radar Card -->
+          <div id="collision-radar-card" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2 hidden">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <i data-lucide="terminal" class="w-3.5 h-3.5 text-indigo-400"></i> Candidate Prompt Dispatcher
-              </span>
-              <div class="flex items-center space-x-2 text-xs">
-                <span class="text-slate-400">Coding as:</span>
-                <select id="coding-candidate-select" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs font-medium focus:ring-1 focus:ring-emerald-500">
-                  <option value="Candidate B">Candidate B (Backend)</option>
-                  <option value="Candidate A">Candidate A (Backend Lead)</option>
-                  <option value="Elena">Elena (Frontend Dev)</option>
-                  <option value="Candidate C">Candidate C (DevOps)</option>
-                </select>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Collision Analysis</span>
+              <span id="radar-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800">COLLISION</span>
+            </div>
+            <p id="radar-message" class="text-xs font-semibold text-white"></p>
+            <p id="radar-recommendation" class="text-[11px] text-slate-300"></p>
+            <div class="space-y-1 pt-1">
+              <div class="flex items-center justify-between text-[10px] text-slate-400">
+                <span>Overlap:</span>
+                <span id="radar-similarity-pct" class="font-mono text-white font-bold">0%</span>
+              </div>
+              <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div id="radar-similarity-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
               </div>
             </div>
-
-            <!-- Quick Test Prompts -->
-            <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 space-y-1.5">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                <span>Quick Scenario Prompts</span>
-                <span class="text-[10px] text-indigo-400">Click to fill</span>
-              </div>
-              <div class="flex flex-col space-y-1 text-xs">
-                <button class="coding-quick-btn text-left p-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] flex items-center justify-between group" data-prompt="Implement postgres connection pool with retry mechanism and error handler in express">
-                  <span>🔴 "Implement postgres connection pool with retry..."</span>
-                  <span class="text-[10px] text-rose-400 font-mono opacity-0 group-hover:opacity-100 transition">Triggers Collision!</span>
-                </button>
-                <button class="coding-quick-btn text-left p-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] flex items-center justify-between group" data-prompt="Build Docker compose setup for PostgreSQL and Redis caching">
-                  <span>🟡 "Build Docker compose setup for Postgres and Redis..."</span>
-                  <span class="text-[10px] text-amber-400 font-mono opacity-0 group-hover:opacity-100 transition">Synergy Overlap</span>
-                </button>
-                <button class="coding-quick-btn text-left p-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] flex items-center justify-between group" data-prompt="Create express middleware to verify JWT tokens and handle refresh token rotation">
-                  <span>🟢 "Create express middleware to verify JWT tokens..."</span>
-                  <span class="text-[10px] text-emerald-400 font-mono opacity-0 group-hover:opacity-100 transition">Unique Task</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Prompt Textarea -->
-            <div class="space-y-1">
-              <label class="text-[11px] font-semibold text-slate-300">Prompt / Task Request to AI Assistant</label>
-              <textarea
-                id="coding-prompt-input"
-                rows="3"
-                placeholder="Describe what you want to build or code (e.g. 'Implement postgres connection pool with retry mechanism...')"
-                class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
-              ></textarea>
-            </div>
-
-            <div class="flex items-center space-x-2">
-              <button id="btn-check-collision" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition">
-                <i data-lucide="radar" class="w-3.5 h-3.5 text-emerald-400"></i> Check Collision (Pre-Flight)
-              </button>
-              <button id="btn-claim-task" class="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow shadow-emerald-600/20">
-                <i data-lucide="play" class="w-3.5 h-3.5"></i> Put into Work (Claim)
+            <div id="radar-action-buttons" class="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+              <button id="btn-adopt-task" class="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow">
+                <i data-lucide="check-check" class="w-3.5 h-3.5"></i> Adopt Existing Work (Save Tokens)
               </button>
             </div>
-
-            <!-- Live Collision Radar Result Card -->
-            <div id="collision-radar-card" class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5 hidden">
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pre-Flight Analysis</span>
-                <span id="radar-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800">HIGH COLLISION</span>
-              </div>
-
-              <!-- Message and Recommendation -->
-              <p id="radar-message" class="text-xs font-semibold text-white"></p>
-              <p id="radar-recommendation" class="text-[11px] text-slate-300"></p>
-
-              <!-- Progress bar for similarity -->
-              <div class="space-y-1 pt-1">
-                <div class="flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Semantic Similarity to Team Work:</span>
-                  <span id="radar-similarity-pct" class="font-mono text-white font-bold">89% Match</span>
-                </div>
-                <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div id="radar-similarity-bar" class="h-full bg-gradient-to-r from-emerald-500 to-rose-500 rounded-full transition-all duration-500" style="width: 89%"></div>
-                </div>
-              </div>
-
-              <!-- Component Locks / Files Overlap -->
-              <div class="pt-1 text-[11px] text-slate-400">
-                <span>Target Component Locks: </span>
-                <span id="radar-files-overlap" class="font-mono text-emerald-300 font-semibold">src/db/pool.js</span>
-              </div>
-
-              <!-- Action Resolution Buttons (Triggered on collision) -->
-              <div id="radar-action-buttons" class="pt-2 border-t border-slate-800 flex items-center gap-2">
-                <button id="btn-adopt-task" class="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow">
-                  <i data-lucide="check-check" class="w-3.5 h-3.5"></i> Adopt Candidate A's Work (Save ~3,500 Tokens)
-                </button>
-              </div>
-            </div>
-
           </div>
-
-          <!-- Right Column: Team Live Work Board & Code Artifacts -->
-          <div class="w-1/2 p-4 flex flex-col space-y-3 overflow-hidden bg-slate-900/40">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <i data-lucide="layout-grid" class="w-3.5 h-3.5 text-indigo-400"></i> Team Work Board & Component Locks
-              </span>
-              <span class="text-[10px] text-slate-500">Live Active Claims</span>
-            </div>
-
-            <!-- Task Claims List -->
-            <div id="coding-tasks-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
-              <!-- Rendered dynamic task cards -->
-            </div>
-
-            <!-- Code Artifact Preview Modal/Drawer -->
-            <div id="code-viewer-container" class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5 max-h-56 flex flex-col">
-              <div class="flex items-center justify-between text-xs">
-                <span id="code-viewer-title" class="font-mono font-bold text-slate-200 text-[11px] flex items-center gap-1.5">
-                  <i data-lucide="file-code" class="w-3.5 h-3.5 text-indigo-400"></i> Code Artifact Preview
-                </span>
-                <span id="code-viewer-author" class="text-[10px] text-emerald-400 font-semibold">Candidate A</span>
-              </div>
-              <pre id="code-viewer-content" class="flex-1 p-2.5 bg-slate-900/90 rounded border border-slate-800 text-[10px] font-mono text-slate-300 overflow-auto"></pre>
-            </div>
-
-          </div>
-
         </div>
-      </section>
 
-    </main>
+        <!-- Right: Team Work Board & Code Viewer -->
+        <div class="w-1/2 p-4 flex flex-col space-y-3 overflow-hidden bg-slate-900/30">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <i data-lucide="layout-grid" class="w-3.5 h-3.5 text-indigo-400"></i> Active Team Claims & Code Locks
+          </div>
+          <div id="coding-tasks-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+          <div id="code-viewer-container" class="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-1.5 max-h-52 flex flex-col">
+            <div class="flex items-center justify-between text-xs">
+              <span id="code-viewer-title" class="font-mono font-bold text-slate-200 text-[11px]">Code Artifact</span>
+              <span id="code-viewer-author" class="text-[10px] text-emerald-400 font-semibold">Author</span>
+            </div>
+            <pre id="code-viewer-content" class="flex-1 p-2.5 bg-slate-950 rounded border border-slate-800 text-[10px] font-mono text-slate-300 overflow-auto"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <!-- Right Side: The Inspect Panel (Explains Itself) -->
-    <aside id="inspect-panel" class="w-96 border-l border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-hidden transition-all duration-300">
-      <!-- Inspect Header -->
+    <!-- Side-by-Side Slide-out: The Inspect Panel (Explains Itself) -->
+    <aside id="inspect-panel" class="w-88 border-l border-slate-800/80 bg-slate-950 flex flex-col shrink-0 overflow-hidden transition-all duration-300 hidden">
       <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
         <div class="flex items-center space-x-2">
           <div class="w-6 h-6 rounded bg-indigo-950 text-indigo-400 border border-indigo-700 flex items-center justify-center">
-            <i data-lucide="scan-eye" class="w-4 h-4"></i>
+            <i data-lucide="scan-eye" class="w-3.5 h-3.5"></i>
           </div>
           <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">Inspect Retrieval</span>
         </div>
@@ -424,119 +343,219 @@
         </button>
       </div>
 
-      <!-- Inspect Content Scroll -->
       <div id="inspect-content" class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-        <!-- Empty State Default -->
         <div id="inspect-empty" class="text-center py-12 text-slate-500 space-y-2">
           <i data-lucide="search" class="w-8 h-8 mx-auto text-slate-600"></i>
           <p class="font-medium text-slate-400">No Query Inspected Yet</p>
           <p class="text-[11px] text-slate-500 max-w-xs mx-auto">
-            Ask any question in the chat or click <strong class="text-indigo-400">"Inspect Retrieval"</strong> on any assistant answer to see the exact retrieval metrics, similarity scores, filters, and grounding proof.
+            Ask any question to the chatbot or click "Inspect" to view retrieval metrics, cosine similarity scores, and active filters.
           </p>
         </div>
 
-        <!-- Dynamic Inspection Breakdown Container -->
         <div id="inspect-details" class="hidden space-y-4">
-          <!-- Inspected Query Card -->
           <div class="bg-slate-900 p-3 rounded-lg border border-slate-800 space-y-1">
-            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Inspected User Query</div>
-            <div id="inspect-query-text" class="text-sm font-semibold text-white">"What database are we using and why?"</div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Query Evaluated</div>
+            <div id="inspect-query-text" class="text-xs font-semibold text-white"></div>
             <div class="flex items-center gap-2 pt-1">
-              <span id="inspect-intent-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/60">Active State Intent</span>
-              <span id="inspect-timestamp" class="text-[10px] text-slate-500">Just now</span>
+              <span id="inspect-intent-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/60">Active State</span>
+              <span id="inspect-timestamp" class="text-[10px] text-slate-500"></span>
             </div>
           </div>
 
-          <!-- Active Filter Evaluation -->
           <div class="bg-slate-900/90 p-3 rounded-lg border border-slate-800 space-y-2">
             <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
               <span>Filters Evaluated</span>
               <i data-lucide="filter" class="w-3.5 h-3.5 text-indigo-400"></i>
             </div>
-            <div id="inspect-filters-list" class="space-y-1.5 font-mono text-[11px]">
-              <!-- Injected dynamically -->
-            </div>
+            <div id="inspect-filters-list" class="space-y-1.5 font-mono text-[11px]"></div>
           </div>
 
-          <!-- Retrieved Memories (Selected) -->
           <div class="space-y-2">
             <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center justify-between">
-              <span>Selected Memories (Used in Answer)</span>
-              <span id="inspect-selected-count" class="px-1.5 py-0.2 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded font-bold">1</span>
+              <span>Selected Memories (Answer Grounding)</span>
+              <span id="inspect-selected-count" class="px-1.5 py-0.2 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded font-bold">0</span>
             </div>
-            <div id="inspect-selected-list" class="space-y-2">
-              <!-- Selected cards -->
-            </div>
+            <div id="inspect-selected-list" class="space-y-2"></div>
           </div>
 
-          <!-- Rejected / Excluded Memories -->
           <div class="space-y-2">
             <div class="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
               <span>Considered but Filtered Out</span>
               <span id="inspect-rejected-count" class="px-1.5 py-0.2 bg-amber-950 text-amber-400 border border-amber-800 rounded font-bold">0</span>
             </div>
-            <div id="inspect-rejected-list" class="space-y-2">
-              <!-- Rejected cards -->
-            </div>
+            <div id="inspect-rejected-list" class="space-y-2"></div>
           </div>
 
-          <!-- Memory vs Chat History Proof Box -->
-          <div class="bg-indigo-950/30 border border-indigo-900/60 rounded-lg p-3 space-y-2">
-            <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center justify-between">
-              <span>Prompt Grounding Proof</span>
-              <i data-lucide="shield" class="w-3.5 h-3.5 text-indigo-400"></i>
-            </div>
-            <p class="text-[11px] text-slate-300">
-              Unlike normal chatbots that dump noisy raw chat transcripts, this assistant synthesized its response <strong class="text-white">strictly from the verified structured memory records</strong> above.
-            </p>
-            <details class="text-[11px]">
-              <summary class="cursor-pointer text-indigo-400 hover:text-indigo-300 font-medium">View Raw Injected Prompt Payload</summary>
-              <pre id="inspect-prompt-raw" class="mt-2 p-2 bg-slate-950 rounded border border-slate-800 text-[10px] font-mono text-slate-400 overflow-x-auto max-h-48"></pre>
-            </details>
-          </div>
+          <details class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800 text-[11px]">
+            <summary class="cursor-pointer text-indigo-400 font-medium">View Raw Injected Prompt Payload</summary>
+            <pre id="inspect-prompt-raw" class="mt-2 p-2 bg-slate-950 rounded border border-slate-800 text-[10px] font-mono text-slate-400 overflow-x-auto max-h-48"></pre>
+          </details>
         </div>
       </div>
     </aside>
 
   </div>
 
+  <!-- ---------------------------------------------------- -->
+  <!-- 3. Team & User Auth Modal (Login Flow)               -->
+  <!-- ---------------------------------------------------- -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5">
+      <div class="text-center space-y-1.5">
+        <div class="w-12 h-12 rounded-xl bg-indigo-600 mx-auto flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+          <i data-lucide="brain-circuit" class="w-7 h-7"></i>
+        </div>
+        <h2 class="text-lg font-bold text-white">Welcome to SynapseMem</h2>
+        <p class="text-xs text-slate-400">Select your team workspace and user profile to enter.</p>
+      </div>
+
+      <!-- Step 1: Team Selection -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-semibold text-slate-300">1. Select Team Workspace</label>
+        <div class="flex space-x-2">
+          <select id="auth-team-select" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:ring-1 focus:ring-indigo-500 font-medium">
+            <!-- Injected dynamically -->
+          </select>
+          <button id="auth-new-team-btn" class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs" title="Create New Team">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: User Selection -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-semibold text-slate-300">2. Select Your User Profile</label>
+        <div class="flex space-x-2">
+          <select id="auth-user-select" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:ring-1 focus:ring-indigo-500 font-medium">
+            <!-- Injected dynamically based on selected team -->
+          </select>
+          <button id="auth-new-user-btn" class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs" title="Add User to Team">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <button id="auth-submit-btn" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-600/30">
+        <span>Enter Workspace</span>
+        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal: Create New Team -->
+  <div id="create-team-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="building-2" class="w-4 h-4 text-indigo-400"></i> Create Team Workspace
+        </h3>
+        <button id="close-create-team-btn" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <form id="create-team-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Team Name</label>
+          <input type="text" id="new-team-name" required placeholder="e.g. Phoenix Project, Mobile Team" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Description (Optional)</label>
+          <input type="text" id="new-team-desc" placeholder="e.g. Core sprint workspace" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" id="cancel-create-team-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Create Team</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add New User to Team -->
+  <div id="create-user-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="user-plus" class="w-4 h-4 text-indigo-400"></i> Add Member to Team
+        </h3>
+        <button id="close-create-user-btn" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <form id="create-user-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Full Name</label>
+          <input type="text" id="new-user-name" required placeholder="e.g. David Miller" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Role / Job Title</label>
+          <input type="text" id="new-user-role" required placeholder="e.g. Backend Dev, Tech Lead, Candidate" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" id="cancel-create-user-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Add Member</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Time Machine Simulator -->
+  <div id="time-machine-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="history" class="w-4 h-4 text-amber-400"></i> Time Machine Simulator
+        </h3>
+        <button id="close-time-machine-btn" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <p class="text-slate-400 text-[11px]">Advance simulated time to test how short-lived deadlines (like "demo is on Friday") automatically expire.</p>
+      <div class="space-y-2">
+        <button id="time-today-btn" class="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-left flex items-center justify-between">
+          <span>Set Time to Today (Oct 30, 2026)</span>
+          <span class="text-indigo-400">Reset</span>
+        </button>
+        <button id="time-nextweek-btn" class="w-full py-2 px-3 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-300 text-left flex items-center justify-between">
+          <span>Fast-Forward +7 Days (Expire Friday Demo)</span>
+          <span class="text-amber-400 font-bold">+7d</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Add / Edit Memory -->
   <div id="memory-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full shadow-2xl overflow-hidden">
-      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full shadow-2xl p-5 space-y-4 text-xs">
+      <div class="flex items-center justify-between">
         <h3 id="modal-title" class="text-sm font-bold text-white flex items-center gap-2">
-          <i data-lucide="edit-3" class="w-4 h-4 text-indigo-400"></i> Add New Memory
+          <i data-lucide="edit-3" class="w-4 h-4 text-indigo-400"></i> Add Decision
         </h3>
         <button id="modal-close-btn" class="text-slate-400 hover:text-white p-1">
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
 
-      <form id="memory-form" class="p-4 space-y-3 text-xs">
+      <form id="memory-form" class="space-y-3">
         <input type="hidden" id="form-memory-id">
-
         <div>
-          <label class="block text-slate-400 font-medium mb-1">Topic / Category</label>
+          <label class="block text-slate-300 font-semibold mb-1">Topic / Category</label>
           <input type="text" id="form-topic" required placeholder="e.g. Database, Auth, Frontend, Demo" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
         </div>
-
         <div>
-          <label class="block text-slate-400 font-medium mb-1">Decision / Statement</label>
+          <label class="block text-slate-300 font-semibold mb-1">Decision / Agreement</label>
           <textarea id="form-decision" rows="2" required placeholder="e.g. We are using Postgres for relational data" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500"></textarea>
         </div>
-
         <div>
-          <label class="block text-slate-400 font-medium mb-1">Reason / Rationale</label>
+          <label class="block text-slate-300 font-semibold mb-1">Reason / Rationale</label>
           <input type="text" id="form-reason" placeholder="e.g. The team knows SQL and we need ACID guarantees" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
         </div>
-
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-slate-400 font-medium mb-1">Owner / Decider</label>
+            <label class="block text-slate-300 font-semibold mb-1">Owner</label>
             <input type="text" id="form-owner" placeholder="e.g. Sarah, Tech Lead, Team" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
           </div>
           <div>
-            <label class="block text-slate-400 font-medium mb-1">Status</label>
+            <label class="block text-slate-300 font-semibold mb-1">Status</label>
             <select id="form-status" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
               <option value="active">Active</option>
               <option value="superseded">Superseded</option>
@@ -544,25 +563,9 @@
             </select>
           </div>
         </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-slate-400 font-medium mb-1">Type</label>
-            <select id="form-type" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
-              <option value="decision">Decision</option>
-              <option value="assumption">Assumption</option>
-              <option value="deadline">Deadline</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-slate-400 font-medium mb-1">Valid Until (Expiry)</label>
-            <input type="datetime-local" id="form-valid-until" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:ring-1 focus:ring-indigo-500">
-          </div>
-        </div>
-
-        <div class="flex justify-end space-x-2 pt-3 border-t border-slate-800">
-          <button type="button" id="modal-cancel-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">Cancel</button>
-          <button type="submit" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Save Memory</button>
+        <div class="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+          <button type="button" id="modal-cancel-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Save Decision</button>
         </div>
       </form>
     </div>
