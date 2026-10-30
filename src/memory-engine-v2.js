@@ -76,13 +76,27 @@ export function parseTemporalValidity(text, baseDate = getAppNow()) {
     return { validUntil: d, isTemporal: true };
   }
 
-  const untilMatch = lower.match(/(?:until|before|by)\s+([a-z]+)\s+(\d{1,2})(?:,?\s*(\d{4}))?/i);
-  if (untilMatch) {
-    const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-    const mIdx = monthNames.findIndex(m => untilMatch[1].toLowerCase().startsWith(m));
+  const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+  // Format 1: until October 30, 2026
+  const untilMatch1 = lower.match(/(?:until|before|by)\s+([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/i);
+  if (untilMatch1) {
+    const mIdx = monthNames.findIndex(m => untilMatch1[1].toLowerCase().startsWith(m));
     if (mIdx !== -1) {
-      const year = untilMatch[3] ? parseInt(untilMatch[3], 10) : baseDate.getFullYear();
-      const day = parseInt(untilMatch[2], 10);
+      const year = untilMatch1[3] ? parseInt(untilMatch1[3], 10) : baseDate.getFullYear();
+      const day = parseInt(untilMatch1[2], 10);
+      const d = new Date(year, mIdx, day, 18, 0, 0);
+      return { validUntil: d, isTemporal: true };
+    }
+  }
+
+  // Format 2: until 30 October 2026 / 30th Oct
+  const untilMatch2 = lower.match(/(?:until|before|by)\s+(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:,?\s*(\d{4}))?/i);
+  if (untilMatch2) {
+    const mIdx = monthNames.findIndex(m => untilMatch2[2].toLowerCase().startsWith(m));
+    if (mIdx !== -1) {
+      const year = untilMatch2[3] ? parseInt(untilMatch2[3], 10) : baseDate.getFullYear();
+      const day = parseInt(untilMatch2[1], 10);
       const d = new Date(year, mIdx, day, 18, 0, 0);
       return { validUntil: d, isTemporal: true };
     }
@@ -177,7 +191,7 @@ export async function extractAndFormMemory({
     confidence: 0.96,
     sensitivity: scope === 'user' ? 'private' : 'workspace',
     confirmation: 'confirmed',
-    status: 'active',
+    status: (temporal.validUntil && new Date(temporal.validUntil) <= now) ? 'expired' : 'active',
     createdAt: now,
     updatedAt: now,
     validFrom: now,
@@ -213,16 +227,16 @@ export async function extractAndFormMemory({
 /**
  * Handle superseding of older decisions with new explicit directives
  */
-async function handleSuperseding(newMemory) {
+export async function handleSuperseding(newMemory) {
   const activeMemories = await findMemories({
     workspaceId: newMemory.workspaceId,
     status: 'active'
   });
 
-  const newText = (newMemory.content.statement + ' ' + (newMemory.source.excerpt || '')).toLowerCase();
-  const isSwitchSignal = /switch|switching|actually|now approved|approved|changed/i.test(newText);
+  const newText = ((newMemory.content?.statement || '') + ' ' + (newMemory.source?.excerpt || '')).toLowerCase();
+  const isSwitchSignal = /switch|switching|actually|now approved|approved|changed|extend|reschedule|update/i.test(newText);
 
-  let targetToSupersede = null;
+  let lastSuperseded = null;
 
   for (const existing of activeMemories) {
     if (existing._id.toString() === newMemory._id.toString()) continue;
@@ -238,35 +252,34 @@ async function handleSuperseding(newMemory) {
     // Database switch
     const isDbSwitch = existing.topic === 'Database' && isSwitchSignal;
 
-    if (isRedisTransition || (sameTopic && isSwitchSignal) || isDbSwitch) {
-      targetToSupersede = existing;
-      break;
+    // Deployment freeze update / rescheduling (a new deployment freeze replaces any prior active deployment freeze)
+    const isDeploymentUpdate = (existing.topic === 'Deployment' && newMemory.topic === 'Deployment') ||
+      (/freeze|deployment/i.test(existing.content?.statement || '') && /freeze|deployment/i.test(newText));
+
+    if (isRedisTransition || isDeploymentUpdate || (sameTopic && isSwitchSignal) || isDbSwitch) {
+      const now = getAppNow();
+      await updateMemoryDocument(existing._id, {
+        status: 'superseded',
+        supersededBy: newMemory._id.toString(),
+        updatedAt: now
+      });
+
+      newMemory.supersedesId = existing._id.toString();
+
+      await recordMemoryEvent({
+        eventId: `evt_sup_${Date.now()}`,
+        type: 'MEMORY_SUPERSEDED',
+        memoryId: existing._id.toString(),
+        supersededBy: newMemory._id.toString(),
+        actorId: newMemory.createdBy,
+        timestamp: now
+      });
+
+      lastSuperseded = existing;
     }
   }
 
-  if (targetToSupersede) {
-    const now = getAppNow();
-    await updateMemoryDocument(targetToSupersede._id, {
-      status: 'superseded',
-      supersededBy: newMemory._id.toString(),
-      updatedAt: now
-    });
-
-    newMemory.supersedesId = targetToSupersede._id.toString();
-
-    await recordMemoryEvent({
-      eventId: `evt_sup_${Date.now()}`,
-      type: 'MEMORY_SUPERSEDED',
-      memoryId: targetToSupersede._id.toString(),
-      supersededBy: newMemory._id.toString(),
-      actorId: newMemory.createdBy,
-      timestamp: now
-    });
-
-    return targetToSupersede;
-  }
-
-  return null;
+  return lastSuperseded;
 }
 
 /**
