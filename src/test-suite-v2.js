@@ -27,6 +27,11 @@ import {
   getConsensusHistory,
   getConsensusStats
 } from './consensus-engine-v2.js';
+import {
+  AVAILABLE_MODELS,
+  generateMultiModelAnswer,
+  buildGroundingPrompt
+} from './providers/llm-provider.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -275,5 +280,49 @@ assert(consensusStats.totalProposals >= 2, 'Consensus stats must reflect recorde
 console.log(`Consensus Registry: ${consensusStats.totalProposals} Proposals Evaluated (${consensusStats.ratifiedCount} Ratified, ${consensusStats.rejectedCount} Rejected, ${consensusStats.vetoCount} Vetoes)`);
 console.log('✔ Passed: Multi-agent quorum consensus and hard veto protection verified.\n');
 
-console.log('🎉 ALL 11 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+console.log('▶ TEST 12: Live Multi-Model LLM Grounding & Prompt Synthesis (Gemini / Claude / Local)');
+assert(AVAILABLE_MODELS.length >= 3, 'Must support at least 3 models (Gemini, Claude, Local)');
+const hasGemini = AVAILABLE_MODELS.some(m => m.provider === 'gemini');
+const hasClaude = AVAILABLE_MODELS.some(m => m.provider === 'claude');
+assert(hasGemini, 'Must support Google Gemini models');
+assert(hasClaude, 'Must support Anthropic Claude models');
+
+// Verify strict grounding prompt constructor
+const samplePrompt = buildGroundingPrompt({
+  query: 'Can we use Redis for caching?',
+  memories: [{
+    _id: 'sample_1',
+    topic: 'Infrastructure',
+    ownerId: 'u_sarah',
+    status: 'active',
+    content: { statement: 'We have approved Redis for caching with MongoDB Atlas.', reason: 'Performance' }
+  }]
+});
+assert(samplePrompt.includes('ZERO CHAT HISTORY INJECTION'), 'System prompt must enforce zero chat history');
+assert(samplePrompt.includes('We have approved Redis for caching with MongoDB Atlas'), 'Prompt must inject Atlas memory records');
+
+// Verify multi-model recall execution
+const geminiRecall = await recallMemories({
+  query: 'Can we use Redis for caching?',
+  user: { id: 'u_sarah' },
+  workspaceId: 'ws_core',
+  model: 'gemini-2.5-flash'
+});
+assert(geminiRecall.answer && geminiRecall.answer.length > 10, 'Must produce grounded answer');
+assert.strictEqual(geminiRecall.trace.promptPayload.chat_history_injected, false, 'Chat history injection must be false');
+assert.strictEqual(geminiRecall.trace.promptPayload.modelRequested, 'gemini-2.5-flash');
+
+const claudeRecall = await recallMemories({
+  query: 'What database are we using?',
+  user: { id: 'u_sarah' },
+  workspaceId: 'ws_core',
+  model: 'claude-3-5-sonnet'
+});
+assert(claudeRecall.answer && claudeRecall.answer.length > 10, 'Claude model recall must return grounded answer');
+assert.strictEqual(claudeRecall.trace.promptPayload.modelRequested, 'claude-3-5-sonnet');
+console.log(`Gemini Model Recall: "${geminiRecall.answer.slice(0, 70)}..."`);
+console.log(`Claude Model Recall: "${claudeRecall.answer.slice(0, 70)}..."`);
+console.log('✔ Passed: Live multi-model LLM grounding and strict zero-history synthesis verified.\n');
+
+console.log('🎉 ALL 12 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

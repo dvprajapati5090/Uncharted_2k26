@@ -1,6 +1,7 @@
 import { embedQuery } from './providers/embedding-provider.js';
 import { executeAtlasVectorSearch, getMemoryById } from './db-mongo.js';
 import { getAppNow, refreshExpirations } from './memory-engine-v2.js';
+import { generateMultiModelAnswer } from './providers/llm-provider.js';
 
 /**
  * Recall engine using MongoDB Atlas $vectorSearch with server-side ownership & lifecycle validation
@@ -10,7 +11,9 @@ export async function recallMemories({
   user,
   workspaceId,
   scope = 'all',
-  isHistorical = false
+  isHistorical = false,
+  model = 'gemini-2.5-flash',
+  apiKey = ''
 }) {
   await refreshExpirations();
   const now = getAppNow();
@@ -105,8 +108,14 @@ export async function recallMemories({
     selectedMemories.push(candidate);
   }
 
-  // 5. Generate Grounded Answer & Dual-Mode Baseline (with memory vs. without memory)
-  const responseGeneration = synthesizeResponses(query, selectedMemories, rejectedMemories);
+  // 5. Generate Multi-Model Grounded Answer & Dual-Mode Baseline (with memory vs. without memory)
+  const responseGeneration = await generateMultiModelAnswer({
+    query,
+    memories: selectedMemories,
+    rejectedMemories,
+    model,
+    apiKey
+  });
 
   const trace = {
     query: query,
@@ -125,7 +134,7 @@ export async function recallMemories({
       owner: m.ownerId
     })),
     rejectedMemories: rejectedMemories,
-    promptPayload: {
+    promptPayload: responseGeneration.promptPayload || {
       chat_history_injected: false,
       memory_records_injected: selectedMemories.map(m => m._id.toString())
     }
