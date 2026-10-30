@@ -22,6 +22,11 @@ import {
   checkPrivacyFilter
 } from './memory-engine-v2.js';
 import { recallMemories } from './recall-engine-v2.js';
+import {
+  evaluateMemoryConsensus,
+  getConsensusHistory,
+  getConsensusStats
+} from './consensus-engine-v2.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -227,5 +232,48 @@ console.log(`Matched Macro Domain: ${hSearch.matchedCluster.name} (Match: ${Math
 console.log(`Resolved Child Decisions: ${hSearch.resolvedDecisions.length}`);
 console.log('✔ Passed: Hierarchical multi-vector clustering and parent-child domain resolution verified.\n');
 
-console.log('🎉 ALL 10 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+console.log('▶ TEST 11: Multi-Agent Consensus & Quorum Memory Validation');
+setSimulatedTime('2026-10-30T10:00:00.000Z');
+// 1. Valid proposal: Architect, Security, and DevOps should ratify (Quorum >= 67%)
+const validProposal = await evaluateMemoryConsensus({
+  content: { statement: 'We use MongoDB Atlas with Redis read-through caching for high throughput.' },
+  topic: 'Infrastructure',
+  ownerId: 'u_sarah',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(validProposal.status, 'ratified', 'Compliant proposal must be ratified by agent quorum');
+assert.strictEqual(validProposal.quorumReached, true, 'Quorum must be achieved');
+assert.strictEqual(validProposal.hasHardVeto, false, 'No agent should issue a hard veto on compliant proposal');
+assert(validProposal.approvalRate >= 0.67, 'Approval rate must meet or exceed 67% quorum threshold');
+console.log(`Valid Proposal Quorum: ${validProposal.approvalCount}/${validProposal.totalVoters} Votes (${Math.round(validProposal.approvalRate * 100)}%) -> ${validProposal.status.toUpperCase()}`);
+
+// 2. Unsafe proposal: Attempting to deploy immediately to production during active freeze
+const vetoProposal = await evaluateMemoryConsensus({
+  content: { statement: 'Deploy now to production immediately, bypass freeze window.' },
+  topic: 'Deployment',
+  ownerId: 'u_marcus',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(vetoProposal.status, 'rejected', 'Proposal violating deployment freeze must be rejected');
+assert.strictEqual(vetoProposal.hasHardVeto, true, 'Pipeline Marshal must issue a critical veto');
+assert(vetoProposal.dissentingViews.length > 0, 'Dissenting rationale must be recorded');
+console.log(`Vetoed Proposal: Veto Issued by ${vetoProposal.votes.find(v => v.veto)?.agentName} -> ${vetoProposal.status.toUpperCase()}`);
+
+// 3. Rogue database proposal: Atlas Architect should vote reject
+const rogueProposal = await evaluateMemoryConsensus({
+  content: { statement: 'Migrate entire user database to DynamoDB and drop MongoDB.' },
+  topic: 'Infrastructure',
+  ownerId: 'u_marcus',
+  workspaceId: 'ws_core'
+});
+const architectVote = rogueProposal.votes.find(v => v.agentId === 'agent_architect');
+assert(architectVote && architectVote.vote === 'reject', 'Atlas Architect must reject unvetted rogue database');
+console.log(`Rogue DB Proposal: Architect Voted ${architectVote.vote.toUpperCase()} ("${architectVote.rationale}")`);
+
+const consensusStats = await getConsensusStats('ws_core');
+assert(consensusStats.totalProposals >= 2, 'Consensus stats must reflect recorded proposals');
+console.log(`Consensus Registry: ${consensusStats.totalProposals} Proposals Evaluated (${consensusStats.ratifiedCount} Ratified, ${consensusStats.rejectedCount} Rejected, ${consensusStats.vetoCount} Vetoes)`);
+console.log('✔ Passed: Multi-agent quorum consensus and hard veto protection verified.\n');
+
+console.log('🎉 ALL 11 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

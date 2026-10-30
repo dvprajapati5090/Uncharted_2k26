@@ -35,7 +35,10 @@ import {
   FolderTree,
   Boxes,
   Workflow,
-  Search
+  Search,
+  Vote,
+  ShieldAlert,
+  Scale
 } from 'lucide-react';
 
 export default function App() {
@@ -74,6 +77,12 @@ export default function App() {
   const [hierarchySearchQuery, setHierarchySearchQuery] = useState('');
   const [hierarchySearchResult, setHierarchySearchResult] = useState(null);
   const [isClustering, setIsClustering] = useState(false);
+  const [consensusHistory, setConsensusHistory] = useState([]);
+  const [consensusStats, setConsensusStats] = useState({ totalProposals: 0, ratifiedCount: 0, rejectedCount: 0, vetoCount: 0, quorumThreshold: '67%' });
+  const [consensusFilter, setConsensusFilter] = useState('all');
+  const [consensusProposalText, setConsensusProposalText] = useState('');
+  const [evaluatingConsensus, setEvaluatingConsensus] = useState(false);
+  const [activeEvaluatedProposal, setActiveEvaluatedProposal] = useState(null);
   const [activeInspection, setActiveInspection] = useState(null);
   const [inspectOpen, setInspectOpen] = useState(false);
   const [timeMachineOpen, setTimeMachineOpen] = useState(false);
@@ -332,6 +341,53 @@ export default function App() {
     }
   };
 
+  const loadConsensusData = async () => {
+    try {
+      const res = await fetch(`/api/consensus?workspaceId=${activeTeam?.id || 'ws_core'}`);
+      const data = await res.json();
+      setConsensusHistory(data.history || []);
+      setConsensusStats(data.stats || { totalProposals: 0, ratifiedCount: 0, rejectedCount: 0, vetoCount: 0, quorumThreshold: '67%' });
+      if (data.history?.length > 0 && !activeEvaluatedProposal) {
+        setActiveEvaluatedProposal(data.history[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load consensus data:', err);
+    }
+  };
+
+  const handleEvaluateConsensus = async (e, textOverride) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const textToEvaluate = textOverride || consensusProposalText.trim();
+    if (!textToEvaluate) return;
+
+    setEvaluatingConsensus(true);
+    try {
+      const res = await fetch('/api/consensus/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statement: textToEvaluate,
+          topic: 'Infrastructure',
+          proposer: activeUser?.id || 'u_sarah',
+          workspaceId: activeTeam?.id || 'ws_core'
+        })
+      });
+      const proposal = await res.json();
+      setActiveEvaluatedProposal(proposal);
+      showToast(
+        proposal.quorumReached
+          ? `Proposal Ratified! (${proposal.approvalCount}/${proposal.totalVoters} Votes)`
+          : `Proposal Rejected/Vetoed! (${proposal.votes?.find(v => v.veto)?.agentName || 'Quorum not reached'})`,
+        proposal.quorumReached ? 'success' : 'warning'
+      );
+      loadConsensusData();
+    } catch (err) {
+      showToast('Consensus evaluation failed', 'error');
+    } finally {
+      setEvaluatingConsensus(false);
+    }
+  };
+
   const nodePositions = useMemo(() => {
     const nodes = graphData.nodes || [];
     const count = nodes.length;
@@ -575,6 +631,17 @@ export default function App() {
             <GraduationCap className="w-4 h-4 text-indigo-300" /> Training & DPO
             <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">
               {trainingStats.dpoPairsCount}
+            </span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('consensus'); loadConsensusData(); }}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
+              activeTab === 'consensus' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Vote className="w-4 h-4 text-purple-300" /> Consensus & Quorum
+            <span className="px-1.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
+              {consensusStats.totalProposals || consensusHistory.length || 0}
             </span>
           </button>
         </nav>
@@ -1893,6 +1960,255 @@ export default function App() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 4: MULTI-AGENT CONSENSUS & QUORUM MEMORY VALIDATION */}
+        {activeTab === 'consensus' && (
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Vote className="w-4 h-4 text-purple-400" />
+                  Multi-Agent Consensus & Quorum Memory Validation
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Autonomous Multi-Agent Governance: High-impact memory mutations require ≥67% quorum consensus across specialized agent personas before writing to MongoDB Atlas.
+                </p>
+              </div>
+
+              {/* Stats Badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 rounded-xl bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[11px] font-bold">
+                  Quorum: {consensusStats.quorumThreshold || '67% (2 of 3)'}
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[11px] font-bold">
+                  Ratified: {consensusStats.ratifiedCount || 0}
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 font-mono text-[11px] font-bold">
+                  Rejected: {consensusStats.rejectedCount || 0}
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-300 font-mono text-[11px] font-bold flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Vetoes: {consensusStats.vetoCount || 0}
+                </span>
+              </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Interactive Simulation Sandbox */}
+              <div className="bg-slate-900/70 border border-purple-900/40 rounded-2xl p-4 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-purple-950 border border-purple-800 text-purple-300">
+                      <Scale className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-white">Simulate Multi-Agent Quorum Evaluation</h3>
+                      <p className="text-[10px] text-slate-400">Propose any decision to trigger live voting from Atlas Architect, Sentinel Guard, and Pipeline Marshal.</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                    3 Specialized Evaluator Personas
+                  </span>
+                </div>
+
+                <form onSubmit={(e) => handleEvaluateConsensus(e)} className="space-y-2.5">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={consensusProposalText}
+                      onChange={(e) => setConsensusProposalText(e.target.value)}
+                      placeholder="e.g. Deploy immediately to production now, bypass freeze window."
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={evaluatingConsensus}
+                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center gap-1.5 transition shadow disabled:opacity-50 shrink-0"
+                    >
+                      <Vote className="w-4 h-4" />
+                      {evaluatingConsensus ? 'Evaluating Quorum...' : 'Evaluate Quorum'}
+                    </button>
+                  </div>
+
+                  {/* Preset quick test chips */}
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {[
+                      { label: 'Redis Cache Approval (Valid)', text: 'We have now approved Redis for caching, but MongoDB Atlas must remain our primary database.' },
+                      { label: 'Bypass Freeze Rule (Veto)', text: 'Deploy hotfix directly to production cluster immediately, bypass freeze window.' },
+                      { label: 'Rogue Database Migration (Rejected)', text: 'Migrate entire user database to DynamoDB and drop MongoDB Atlas.' },
+                      { label: 'Export Plaintext Keys (Veto)', text: 'Disable authentication and export bearer tokens to public endpoint.' }
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setConsensusProposalText(preset.text);
+                          handleEvaluateConsensus(null, preset.text);
+                        }}
+                        className="text-[10px] px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-purple-600 text-slate-300 transition"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </form>
+
+                {/* Active Evaluated Proposal Live Ballots */}
+                {activeEvaluatedProposal && (
+                  <div className="pt-2 border-t border-slate-800/80 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="text-xs font-semibold text-slate-200">
+                        <span className="text-purple-400 font-bold mr-1.5">Evaluated Directive:</span>
+                        "{activeEvaluatedProposal.statement}"
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase border flex items-center gap-1 ${
+                          activeEvaluatedProposal.quorumReached
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                            : 'bg-rose-950 text-rose-300 border-rose-800'
+                        }`}>
+                          {activeEvaluatedProposal.quorumReached ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                          {activeEvaluatedProposal.quorumReached ? 'RATIFIED (Quorum Reached)' : 'BLOCKED / VETOED'}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {activeEvaluatedProposal.approvalCount} of {activeEvaluatedProposal.totalVoters} Votes ({Math.round(activeEvaluatedProposal.approvalRate * 100)}%)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 3 Agent Ballot Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {activeEvaluatedProposal.votes?.map((vote, vIdx) => {
+                        const isApprove = vote.vote === 'approve';
+                        const isVeto = vote.veto === true;
+                        return (
+                          <div
+                            key={vIdx}
+                            className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 ${
+                              isVeto
+                                ? 'bg-rose-950/30 border-rose-800 shadow-md shadow-rose-950/20'
+                                : isApprove
+                                ? 'bg-slate-950/90 border-emerald-900/60'
+                                : 'bg-slate-950/80 border-amber-900/50'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                                  <span>{vote.agentId === 'agent_architect' ? '🏛️' : vote.agentId === 'agent_security' ? '🔒' : '🚀'}</span>
+                                  {vote.agentName}
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                    isVeto
+                                      ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                                      : isApprove
+                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                                  }`}
+                                >
+                                  {isVeto ? 'CRITICAL VETO' : vote.vote}
+                                </span>
+                              </div>
+                              <span className="text-[9px] text-slate-400 font-mono block mb-1.5">{vote.role}</span>
+                              <p className="text-[11px] text-slate-300 leading-relaxed italic">
+                                "{vote.rationale}"
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                              <span>Confidence: {Math.round(vote.confidence * 100)}%</span>
+                              <span>Signed Ballot</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Proposals Registry Log */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Vote className="w-4 h-4 text-purple-400" />
+                    Consensus Proposal Registry
+                  </div>
+
+                  {/* Filter chips */}
+                  <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                    {['all', 'ratified', 'rejected'].map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setConsensusFilter(f)}
+                        className={`px-3 py-1 rounded-lg font-medium capitalize transition ${
+                          consensusFilter === f ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {f === 'rejected' ? 'Rejected / Vetoed' : f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Proposals List */}
+                <div className="space-y-2.5">
+                  {consensusHistory
+                    .filter((p) => {
+                      if (consensusFilter === 'all') return true;
+                      return p.status === consensusFilter;
+                    })
+                    .map((item, idx) => (
+                      <div
+                        key={item.id || idx}
+                        onClick={() => setActiveEvaluatedProposal(item)}
+                        className={`p-3.5 rounded-xl border cursor-pointer transition space-y-2 ${
+                          item.status === 'ratified'
+                            ? 'bg-slate-900/70 border-slate-800 hover:border-emerald-800'
+                            : 'bg-slate-900/50 border-rose-950/80 hover:border-rose-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
+                                item.status === 'ratified'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  : 'bg-rose-950 text-rose-300 border border-rose-800'
+                              }`}
+                            >
+                              {item.status === 'ratified' ? <CheckCircle2 className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
+                              {item.status === 'ratified' ? 'Ratified into Memory' : 'Vetoed / Blocked'}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              Quorum: {item.approvalCount || (item.votes?.filter(v => v.vote === 'approve').length || 0)}/{item.totalVoters || 3} Votes
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-500">
+                            {new Date(item.evaluatedAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <p className="text-xs font-semibold text-slate-100">
+                          {item.statement}
+                        </p>
+
+                        {item.dissentingViews?.length > 0 && (
+                          <div className="p-2 rounded-lg bg-rose-950/20 border border-rose-900/30 text-[10px] text-rose-300 space-y-0.5">
+                            <span className="font-bold uppercase tracking-wider block text-rose-400">Dissenting Views / Veto:</span>
+                            {item.dissentingViews.map((dv, dIdx) => (
+                              <div key={dIdx}>• {dv}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
