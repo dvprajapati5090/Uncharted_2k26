@@ -40,6 +40,12 @@ import {
 import { recallMemories } from './recall-engine-v2.js';
 import { embedDocuments } from './providers/embedding-provider.js';
 import {
+  AVAILABLE_MODELS,
+  setRuntimeKey,
+  getRuntimeKey,
+  generateMultiModelAnswer
+} from './providers/llm-provider.js';
+import {
   evaluateMemoryConsensus,
   getConsensusHistory,
   getConsensusStats,
@@ -206,7 +212,9 @@ const server = http.createServer(async (req, res) => {
         const recallResult = await recallMemories({
           query: text,
           user,
-          workspaceId
+          workspaceId,
+          model: body.model || 'gemini-2.5-flash',
+          apiKey: body.apiKey || ''
         });
 
         assistantMessage = {
@@ -261,7 +269,9 @@ const server = http.createServer(async (req, res) => {
         query,
         user,
         workspaceId,
-        isHistorical: body.isHistorical || false
+        isHistorical: body.isHistorical || false,
+        model: body.model || 'gemini-2.5-flash',
+        apiKey: body.apiKey || ''
       });
 
       return sendJson(res, 200, {
@@ -269,6 +279,87 @@ const server = http.createServer(async (req, res) => {
         withoutMemoryAnswer: result.withoutMemoryAnswer,
         selectedMemories: result.selectedMemories.map(formatMemoryForUI),
         inspection: result.trace
+      });
+    }
+
+    // ----------------------------------------------------
+    // 4.1. LIVE STREAMING GROUNDING ENDPOINT (SSE)
+    // ----------------------------------------------------
+    if (req.method === 'POST' && pathname === '/api/chat/stream') {
+      const body = await parseBody(req);
+      const query = (body.query || body.text || '').trim();
+      if (!query) return sendJson(res, 400, { error: 'Query is required' });
+
+      const user = { id: body.userId || 'u_sarah' };
+      const workspaceId = body.workspaceId || 'ws_core';
+      const model = body.model || 'gemini-2.5-flash';
+      const apiKey = body.apiKey || '';
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+      });
+
+      try {
+        const recallResult = await recallMemories({
+          query,
+          user,
+          workspaceId,
+          model,
+          apiKey
+        });
+
+        // 1. Emit grounding trace metadata
+        res.write(`event: grounding\ndata: ${JSON.stringify(recallResult.trace)}\n\n`);
+
+        // 2. Stream answer tokens with live pacing
+        const answer = recallResult.answer || '';
+        const words = answer.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          const chunk = (i === 0 ? '' : ' ') + words[i];
+          res.write(`event: token\ndata: ${JSON.stringify({ chunk, index: i })}\n\n`);
+          await new Promise(r => setTimeout(r, 22));
+        }
+
+        // 3. Emit done event
+        res.write(`event: done\ndata: ${JSON.stringify({
+          answer: recallResult.answer,
+          withoutMemoryAnswer: recallResult.withoutMemoryAnswer,
+          trace: recallResult.trace
+        })}\n\n`);
+      } catch (err) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+      }
+
+      return res.end();
+    }
+
+    // ----------------------------------------------------
+    // 4.2. MULTI-MODEL LLM CONFIGURATION API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/llm/models') {
+      return sendJson(res, 200, {
+        models: AVAILABLE_MODELS,
+        activeKeys: {
+          hasGeminiKey: !!getRuntimeKey('gemini'),
+          hasClaudeKey: !!getRuntimeKey('claude')
+        }
+      });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/llm/keys') {
+      const body = await parseBody(req);
+      if (body.provider && typeof body.key === 'string') {
+        setRuntimeKey(body.provider, body.key);
+      }
+      return sendJson(res, 200, {
+        success: true,
+        activeKeys: {
+          hasGeminiKey: !!getRuntimeKey('gemini'),
+          hasClaudeKey: !!getRuntimeKey('claude')
+        }
       });
     }
 

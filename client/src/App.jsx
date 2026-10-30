@@ -38,7 +38,10 @@ import {
   Search,
   Vote,
   ShieldAlert,
-  Scale
+  Scale,
+  Key,
+  Cpu,
+  Zap
 } from 'lucide-react';
 
 export default function App() {
@@ -83,6 +86,12 @@ export default function App() {
   const [consensusProposalText, setConsensusProposalText] = useState('');
   const [evaluatingConsensus, setEvaluatingConsensus] = useState(false);
   const [activeEvaluatedProposal, setActiveEvaluatedProposal] = useState(null);
+  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [llmModalOpen, setLlmModalOpen] = useState(false);
+  const [geminiKeyInput, setGeminiKeyInput] = useState('');
+  const [claudeKeyInput, setClaudeKeyInput] = useState('');
+  const [activeKeys, setActiveKeys] = useState({ hasGeminiKey: false, hasClaudeKey: false });
+  const [isStreaming, setIsStreaming] = useState(false);
   const [activeInspection, setActiveInspection] = useState(null);
   const [inspectOpen, setInspectOpen] = useState(false);
   const [timeMachineOpen, setTimeMachineOpen] = useState(false);
@@ -388,6 +397,41 @@ export default function App() {
     }
   };
 
+  const loadLlmModels = async () => {
+    try {
+      const res = await fetch('/api/llm/models');
+      const data = await res.json();
+      setActiveKeys(data.activeKeys || { hasGeminiKey: false, hasClaudeKey: false });
+    } catch (err) {
+      console.error('Failed to load LLM models:', err);
+    }
+  };
+
+  const handleSaveLlmKeys = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    try {
+      if (geminiKeyInput.trim()) {
+        await fetch('/api/llm/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'gemini', key: geminiKeyInput.trim() })
+        });
+      }
+      if (claudeKeyInput.trim()) {
+        await fetch('/api/llm/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'claude', key: claudeKeyInput.trim() })
+        });
+      }
+      showToast('LLM API keys updated successfully', 'success');
+      setLlmModalOpen(false);
+      loadLlmModels();
+    } catch (err) {
+      showToast('Failed to save LLM keys', 'error');
+    }
+  };
+
   const nodePositions = useMemo(() => {
     const nodes = graphData.nodes || [];
     const count = nodes.length;
@@ -423,6 +467,94 @@ export default function App() {
     const textToSend = inputText.trim();
     setInputText('');
 
+    if (currentChannel === 'ask-assistant') {
+      const userMsg = {
+        id: `msg_user_${Date.now()}`,
+        channel: currentChannel,
+        sender: activeUser?.name || 'Sarah Jenkins',
+        text: textToSend,
+        timestamp: new Date().toISOString(),
+        is_assistant: false
+      };
+      const tempAsstId = `msg_asst_${Date.now()}`;
+      const tempAsstMsg = {
+        id: tempAsstId,
+        channel: currentChannel,
+        sender: `SynapseMem 2.0 (${selectedModel.includes('gemini') ? 'Gemini 2.5' : selectedModel.includes('claude') ? 'Claude 3.5' : 'Atlas Vector'})`,
+        text: '',
+        is_assistant: true,
+        timestamp: new Date().toISOString(),
+        isStreaming: true,
+        model: selectedModel
+      };
+
+      setMessages(prev => [...prev, userMsg, tempAsstMsg]);
+      setIsStreaming(true);
+
+      try {
+        const response = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: textToSend,
+            userId: activeUser?.id || 'u_sarah',
+            workspaceId: activeTeam?.id || 'ws_core',
+            model: selectedModel
+          })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const parsed = JSON.parse(line.slice(6));
+                if (parsed.chunk) {
+                  accumulated += parsed.chunk;
+                  setMessages(prev => prev.map(m => m.id === tempAsstId ? { ...m, text: accumulated } : m));
+                } else if (parsed.answer) {
+                  accumulated = parsed.answer;
+                  setMessages(prev => prev.map(m => m.id === tempAsstId ? {
+                    ...m,
+                    text: accumulated,
+                    isStreaming: false,
+                    withoutMemoryAnswer: parsed.withoutMemoryAnswer,
+                    inspection_data: parsed.trace
+                  } : m));
+                  if (parsed.trace) setActiveInspection(parsed.trace);
+                } else if (parsed.memory_records_injected) {
+                  setActiveInspection(parsed);
+                }
+              } catch (err) {}
+            }
+          }
+        }
+      } catch (streamErr) {
+        console.warn('Streaming error, falling back:', streamErr);
+      } finally {
+        setIsStreaming(false);
+        await fetch(`/api/channels/${currentChannel}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: textToSend,
+            sender: activeUser?.name || 'Sarah Jenkins',
+            userId: activeUser?.id || 'u_sarah',
+            teamId: activeTeam?.id || 'ws_core',
+            model: selectedModel
+          })
+        });
+      }
+      return;
+    }
+
     try {
       const res = await fetch(`/api/channels/${currentChannel}/messages`, {
         method: 'POST',
@@ -431,7 +563,8 @@ export default function App() {
           text: textToSend,
           sender: activeUser?.name || 'Sarah Jenkins',
           userId: activeUser?.id || 'u_sarah',
-          teamId: activeTeam?.id || 'ws_core'
+          teamId: activeTeam?.id || 'ws_core',
+          model: selectedModel
         })
       });
 
@@ -762,9 +895,40 @@ export default function App() {
                       : 'Decisions and constraints are structured and embedded into MongoDB'}
                   </span>
                 </div>
-                <div className="text-[10px] text-indigo-400 font-medium flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-indigo-400" />
-                  <span>Agentic Memory Active</span>
+
+                <div className="flex items-center gap-2.5">
+                  {currentChannel === 'ask-assistant' && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800 text-xs shadow">
+                        <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer text-xs"
+                        >
+                          <option value="gemini-2.5-flash" className="bg-slate-900 text-slate-200">⚡ Gemini 2.5 Flash</option>
+                          <option value="gemini-1.5-pro" className="bg-slate-900 text-slate-200">🧠 Gemini 1.5 Pro</option>
+                          <option value="claude-3-5-sonnet" className="bg-slate-900 text-slate-200">🔮 Claude 3.5 Sonnet</option>
+                          <option value="local-grounded" className="bg-slate-900 text-slate-200">⚙️ Local Atlas Engine</option>
+                        </select>
+                      </div>
+                      <button
+                        onClick={() => {
+                          loadLlmModels();
+                          setLlmModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-indigo-600 text-slate-400 hover:text-indigo-300 transition"
+                        title="Configure Gemini & Claude API Keys"
+                      >
+                        <Key className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-indigo-400 font-medium flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                    <span className="hidden sm:inline">Agentic Memory Active</span>
+                  </div>
                 </div>
               </div>
 
@@ -809,7 +973,12 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="text-xs text-slate-200 pl-8 leading-relaxed font-normal">{msg.text}</div>
+                      <div className="text-xs text-slate-200 pl-8 leading-relaxed font-normal">
+                        {msg.text}
+                        {msg.isStreaming && (
+                          <span className="inline-block w-2 h-3.5 bg-indigo-400 animate-pulse ml-1 align-middle"></span>
+                        )}
+                      </div>
 
                       {/* Dual-Mode Baseline Contrast Box */}
                       {msg.is_assistant && msg.withoutMemoryAnswer && (
@@ -2547,6 +2716,88 @@ export default function App() {
                   className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold flex items-center gap-1.5 shadow"
                 >
                   <Link2 className="w-3.5 h-3.5" /> Establish Link
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: LIVE LLM CONFIGURATION (GEMINI & CLAUDE) */}
+      {llmModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-indigo-700/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Key className="w-4 h-4 text-indigo-400" /> Live LLM Grounding Configuration
+              </h3>
+              <button onClick={() => setLlmModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Power live streaming answers with real Google Gemini or Anthropic Claude API keys. All responses are strictly grounded on MongoDB Atlas 1024D vectors with zero chat history injected.
+            </p>
+
+            <form onSubmit={handleSaveLlmKeys} className="space-y-3.5">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-200 font-semibold flex items-center gap-1.5">
+                    <span className="text-sm">⚡</span> Google Gemini API Key
+                  </label>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                    activeKeys.hasGeminiKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                  }`}>
+                    {activeKeys.hasGeminiKey ? 'Active Key Set' : 'Fallback / Unset'}
+                  </span>
+                </div>
+                <input
+                  type="password"
+                  value={geminiKeyInput}
+                  onChange={(e) => setGeminiKeyInput(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-200 font-semibold flex items-center gap-1.5">
+                    <span className="text-sm">🔮</span> Anthropic Claude API Key
+                  </label>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                    activeKeys.hasClaudeKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                  }`}>
+                    {activeKeys.hasClaudeKey ? 'Active Key Set' : 'Fallback / Unset'}
+                  </span>
+                </div>
+                <input
+                  type="password"
+                  value={claudeKeyInput}
+                  onChange={(e) => setClaudeKeyInput(e.target.value)}
+                  placeholder="sk-ant-api..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-slate-400 leading-relaxed">
+                💡 <strong className="text-slate-300">Resilient Zero-Breakage Design:</strong> When keys are empty, SynapseMem seamlessly uses the local deterministic Atlas vector grounding engine.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setLlmModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1.5 shadow"
+                >
+                  <Key className="w-3.5 h-3.5" /> Save API Keys
                 </button>
               </div>
             </form>
