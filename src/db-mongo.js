@@ -330,6 +330,33 @@ export async function executeAtlasVectorSearch({
   return scored.slice(0, limit);
 }
 
+// In-memory conversation store for team channels
+const conversationStore = [];
+
+export async function insertMessage(msg) {
+  if (db && isConnected) {
+    try {
+      await db.collection('conversations').insertOne(msg);
+      return msg;
+    } catch (e) {}
+  }
+  conversationStore.push(msg);
+  return msg;
+}
+
+export async function getMessages(channel, workspaceId) {
+  if (db && isConnected) {
+    try {
+      const msgs = await db.collection('conversations')
+        .find({ channel, workspaceId })
+        .sort({ timestamp: 1 })
+        .toArray();
+      if (msgs.length > 0) return msgs;
+    } catch (e) {}
+  }
+  return conversationStore.filter(m => m.channel === channel && (!workspaceId || m.workspaceId === workspaceId));
+}
+
 // User & Workspace queries
 export function getAllUsers() {
   initDefaultData();
@@ -355,9 +382,11 @@ export async function wipeAllStoredData() {
     try {
       await db.collection(config.mongodb.memoriesCollection).deleteMany({});
       await db.collection(config.mongodb.eventsCollection).deleteMany({});
+      await db.collection('conversations').deleteMany({});
     } catch (e) {}
   }
   memoryStore.memories.clear();
   memoryStore.events = [];
+  conversationStore.length = 0;
   initDefaultData();
 }

@@ -144,7 +144,24 @@ async function checkAuth() {
     }
   }
 
-  // Open Auth Modal if no valid session
+  // Auto-connect to default workspace and user if no session
+  try {
+    const res = await fetch('/api/teams');
+    allTeams = await res.json();
+    if (allTeams.length > 0) {
+      currentTeam = allTeams[0];
+      localStorage.setItem('synapse_team', JSON.stringify(currentTeam));
+      const uRes = await fetch('/api/teams/' + currentTeam.id + '/users');
+      teamMembers = await uRes.json();
+      if (teamMembers.length > 0) {
+        currentUser = teamMembers[0];
+        localStorage.setItem('synapse_user', JSON.stringify(currentUser));
+      }
+      updateHeaderProfile();
+      await initializeWorkspace();
+      return;
+    }
+  } catch(e) {}
   await openAuthModal();
 }
 
@@ -420,8 +437,7 @@ async function initializeWorkspace() {
   await loadChannels();
   await loadMemories();
   await loadMessages();
-  await loadCodingStats();
-  await loadCodingTasks();
+  
 }
 
 async function loadChannels() {
@@ -943,29 +959,6 @@ async function confirmDeleteMemory(id) {
 // ----------------------------------------------------
 // 8. Collaborative Coding & Token Guard
 // ----------------------------------------------------
-async function loadCodingStats() {
-  if (!currentTeam) return;
-  try {
-    const res = await fetch(`/api/coding/stats?teamId=${currentTeam.id}`);
-    const stats = await res.json();
-    codingTokensSavedEl.textContent = stats.totalTokensSaved.toLocaleString();
-    codingCollisionsPreventedEl.textContent = stats.collisionsPrevented;
-  } catch (err) {
-    console.error('Failed to load coding stats', err);
-  }
-}
-
-async function loadCodingTasks() {
-  if (!currentTeam) return;
-  try {
-    const res = await fetch(`/api/coding/tasks?teamId=${currentTeam.id}`);
-    const tasks = await res.json();
-    renderCodingTasks(tasks);
-  } catch (err) {
-    console.error('Failed to load coding tasks', err);
-  }
-}
-
 function renderCodingTasks(tasks) {
   codingTasksListEl.innerHTML = '';
   if (!tasks || tasks.length === 0) {
