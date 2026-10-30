@@ -180,11 +180,29 @@ function synthesizeResponses(query, memories, rejectedMemories = []) {
   let answer = '';
 
   if (qLower.includes('deploy') || qLower.includes('freeze')) {
-    const deploymentMem = memories.find(m => m.topic === 'Deployment' || /freeze|deployment/i.test(m.content?.statement || '')) || primary;
-    const untilStr = deploymentMem.validUntil 
-      ? ` until ${new Date(deploymentMem.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-      : '';
-    answer = `Based on stored team constraint: "${deploymentMem.content.statement}"${untilStr}. (${deploymentMem.content.reason || 'Team architecture consensus'})`;
+    const deploymentMem = memories.find(m => m.topic === 'Deployment' || /freeze|deployment/i.test(m.content?.statement || ''));
+    if (deploymentMem) {
+      const untilStr = deploymentMem.validUntil 
+        ? ` until ${new Date(deploymentMem.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+        : '';
+      return {
+        withMemory: `Based on stored team constraint: "${deploymentMem.content.statement}"${untilStr}. (${deploymentMem.content.reason || 'Team architecture consensus'})`,
+        withoutMemory
+      };
+    } else if (expiredDeployment) {
+      const expDate = expiredDeployment.validUntil 
+        ? new Date(expiredDeployment.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'the scheduled date';
+      return {
+        withMemory: `The prior restriction ("${expiredDeployment.statement}") was in effect, but it expired on ${expDate}. There are currently no active deployment freeze rules.`,
+        withoutMemory
+      };
+    } else {
+      return {
+        withMemory: `I checked the persistent memory ledger, but no active decision or constraint matches "${query}".`,
+        withoutMemory
+      };
+    }
   } else if (qLower.includes('background job') || qLower.includes('job system') || qLower.includes('queue')) {
     const hasRedisRestriction = memories.some(m => 
       m.type === 'constraint' && m.content.statement.toLowerCase().includes('redis')

@@ -29,7 +29,8 @@ import {
   extractAndFormMemory,
   getAppNow,
   setSimulatedTime,
-  refreshExpirations
+  refreshExpirations,
+  handleSuperseding
 } from './memory-engine-v2.js';
 import { recallMemories } from './recall-engine-v2.js';
 import { embedDocuments } from './providers/embedding-provider.js';
@@ -280,6 +281,12 @@ const server = http.createServer(async (req, res) => {
       const fullText = `${body.topic}: ${body.decision}. Reason: ${body.reason || ''}`;
       const embeddings = await embedDocuments([fullText]);
 
+      const validUntilDate = body.valid_until ? new Date(body.valid_until) : null;
+      let initialStatus = body.status || 'active';
+      if (validUntilDate && validUntilDate <= getAppNow()) {
+        initialStatus = 'expired';
+      }
+
       const doc = {
         _id: new ObjectId(),
         scope: body.scope || 'workspace',
@@ -296,12 +303,12 @@ const server = http.createServer(async (req, res) => {
         source: { kind: 'manual', channel: 'ledger' },
         confidence: 1.0,
         sensitivity: 'workspace',
-        status: body.status || 'active',
+        status: initialStatus,
         createdAt: getAppNow(),
         updatedAt: getAppNow(),
         validFrom: getAppNow(),
-        validUntil: body.valid_until ? new Date(body.valid_until) : null,
-        purgeAt: null,
+        validUntil: validUntilDate,
+        purgeAt: validUntilDate ? new Date(validUntilDate.getTime() + (7 * 24 * 3600 * 1000)) : null,
         supersedesId: null,
         supersededBy: null,
         version: 1,
@@ -309,6 +316,10 @@ const server = http.createServer(async (req, res) => {
         embeddingModel: config.embedding.model,
         embeddingDimensions: config.embedding.dimensions
       };
+
+      if (initialStatus === 'active') {
+        await handleSuperseding(doc);
+      }
 
       const saved = await insertMemoryDocument(doc);
       return sendJson(res, 201, formatMemoryForUI(saved));
@@ -323,7 +334,13 @@ const server = http.createServer(async (req, res) => {
       if (body.reason) updates['content.reason'] = body.reason;
       if (body.topic) updates.topic = body.topic;
       if (body.status) updates.status = body.status;
-      if (body.valid_until !== undefined) updates.validUntil = body.valid_until ? new Date(body.valid_until) : null;
+      if (body.valid_until !== undefined) {
+        const d = body.valid_until ? new Date(body.valid_until) : null;
+        updates.validUntil = d;
+        if (d && d <= getAppNow()) {
+          updates.status = 'expired';
+        }
+      }
 
       // Re-embed if content changed
       if (body.decision || body.reason || body.topic) {
