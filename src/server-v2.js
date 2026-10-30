@@ -26,7 +26,9 @@ import {
   exportVoyagePairs,
   getMemoryGraph,
   traverseGraphRAG,
-  addMemoryRelation
+  addMemoryRelation,
+  buildHierarchicalClusters,
+  searchHierarchicalMemories
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -472,6 +474,29 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const link = await addMemoryRelation(body.sourceId, body.targetId, body.type, body.label);
       return sendJson(res, 201, { success: true, link });
+    }
+
+    // ----------------------------------------------------
+    // 6.9. HIERARCHICAL MULTI-VECTOR & DOMAIN CLUSTERING API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/hierarchy') {
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const hierarchy = await buildHierarchicalClusters(workspaceId);
+      return sendJson(res, 200, hierarchy);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/hierarchy/recluster') {
+      const body = await parseBody(req).catch(() => ({}));
+      const workspaceId = body.workspaceId || 'ws_core';
+      const hierarchy = await buildHierarchicalClusters(workspaceId);
+      return sendJson(res, 200, { success: true, hierarchy });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/hierarchy/search') {
+      const q = parsedUrl.searchParams.get('q') || '';
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const searchResult = await searchHierarchicalMemories({ query: q, workspaceId });
+      return sendJson(res, 200, searchResult);
     }
 
     // ----------------------------------------------------

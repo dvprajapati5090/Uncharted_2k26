@@ -790,3 +790,263 @@ export async function traverseGraphRAG(startMemoryId, maxDepth = 2) {
     graphContextText
   };
 }
+
+// -------------------------------------------------------------
+// 7. HIERARCHICAL MULTI-VECTOR & SEMANTIC DOMAIN CLUSTERING
+// -------------------------------------------------------------
+
+export function computeCentroidVector(vectors) {
+  if (!Array.isArray(vectors) || vectors.length === 0) return null;
+  const valid = vectors.filter(v => Array.isArray(v) && v.length === 1024);
+  if (valid.length === 0) return null;
+
+  const dims = 1024;
+  const centroid = new Array(dims).fill(0);
+  for (const v of valid) {
+    for (let i = 0; i < dims; i++) {
+      centroid[i] += v[i];
+    }
+  }
+  let sumSq = 0;
+  for (let i = 0; i < dims; i++) {
+    centroid[i] /= valid.length;
+    sumSq += centroid[i] * centroid[i];
+  }
+  const norm = Math.sqrt(sumSq) || 1;
+  for (let i = 0; i < dims; i++) {
+    centroid[i] = parseFloat((centroid[i] / norm).toFixed(6));
+  }
+  return centroid;
+}
+
+const DOMAIN_DEFINITIONS = [
+  {
+    id: 'domain_persistence',
+    name: 'Persistence & Data Layer',
+    topic: 'Infrastructure',
+    keywords: ['mongodb', 'mongo', 'atlas', 'database', 'redis', 'cache', 'caching', 'storage', 'postgres', 'sql', 'nosql', 'db'],
+    macroDirective: 'Authoritative data persistence is governed by MongoDB Atlas. Redis is provisioned as high-performance cache with strict approval boundaries.'
+  },
+  {
+    id: 'domain_deployment',
+    name: 'Release & Delivery Governance',
+    topic: 'Deployment',
+    keywords: ['deploy', 'deployment', 'freeze', 'release', 'production', 'prod', 'canary', 'pipeline', 'cicd'],
+    macroDirective: 'Production deployments enforce automated CI gates and temporal freeze periods during sprint releases.'
+  },
+  {
+    id: 'domain_devex',
+    name: 'Developer Ergonomics & Standards',
+    topic: 'Architecture',
+    keywords: ['ide', 'theme', 'vim', 'contrast', 'editor', 'linter', 'eslint', 'standards', 'formatting', 'keybindings'],
+    macroDirective: 'Developer environment adheres to team ergonomics, high-contrast themes, and unified workspace keybindings.'
+  },
+  {
+    id: 'domain_core',
+    name: 'Core Application Architecture',
+    topic: 'Core',
+    keywords: ['node', 'express', 'backend', 'service', 'api', 'framework', 'architecture'],
+    macroDirective: 'Core microservices utilize modular Express routers with strict schema-first boundaries.'
+  }
+];
+
+export async function buildHierarchicalClusters(workspaceId = 'ws_core') {
+  const memories = await findMemories({ workspaceId });
+  if (!memories || memories.length === 0) {
+    return {
+      clusters: [],
+      summary: { totalClusters: 0, totalDecisions: 0, coherenceScore: 100 }
+    };
+  }
+
+  // Group child memories into domains
+  const clusterBuckets = new Map();
+  for (const def of DOMAIN_DEFINITIONS) {
+    clusterBuckets.set(def.id, {
+      id: def.id,
+      name: def.name,
+      topic: def.topic,
+      macroDirective: def.macroDirective,
+      keywords: def.keywords,
+      children: []
+    });
+  }
+
+  // Catch-all bucket for unmatched topics
+  const unclassifiedBucket = {
+    id: 'domain_general',
+    name: 'General Architectural Principles',
+    topic: 'Architecture',
+    macroDirective: 'Standard cross-cutting architectural principles and conventions.',
+    keywords: [],
+    children: []
+  };
+
+  for (const mem of memories) {
+    const text = ((mem.content?.statement || '') + ' ' + (mem.topic || '')).toLowerCase();
+    let matched = false;
+
+    for (const def of DOMAIN_DEFINITIONS) {
+      const hit = def.keywords.some(kw => text.includes(kw)) || mem.topic === def.topic;
+      if (hit) {
+        clusterBuckets.get(def.id).children.push(mem);
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) {
+      unclassifiedBucket.children.push(mem);
+    }
+  }
+
+  if (unclassifiedBucket.children.length > 0) {
+    clusterBuckets.set(unclassifiedBucket.id, unclassifiedBucket);
+  }
+
+  // Filter out empty clusters and compute centroid multi-vectors
+  const activeClusters = [];
+  let totalDecisions = 0;
+
+  for (const [id, cluster] of clusterBuckets.entries()) {
+    if (cluster.children.length === 0) continue;
+    totalDecisions += cluster.children.length;
+
+    const childEmbeddings = cluster.children.map(m => m.embedding).filter(Boolean);
+    const macroVector = computeCentroidVector(childEmbeddings) || (cluster.children[0]?.embedding);
+
+    const activeCount = cluster.children.filter(m => m.status === 'active').length;
+    const supersededCount = cluster.children.filter(m => m.status === 'superseded').length;
+    const expiredCount = cluster.children.filter(m => m.status === 'expired').length;
+
+    // Coherence score based on active clarity vs conflict ratio
+    const healthScore = Math.min(99, Math.max(90, Math.round(98 - (supersededCount * 2))));
+
+    const mappedChildren = cluster.children.map(m => ({
+      id: m._id.toString(),
+      statement: m.content?.statement || m.topic,
+      topic: m.topic,
+      status: m.status,
+      type: m.type,
+      owner: m.ownerId || 'team',
+      confidence: m.confidence || 0.95,
+      validUntil: m.validUntil,
+      reinforcementUp: m.reinforcementUp || 0,
+      reinforcementDown: m.reinforcementDown || 0
+    }));
+
+    activeClusters.push({
+      id: cluster.id,
+      name: cluster.name,
+      topic: cluster.topic,
+      macroDirective: cluster.macroDirective,
+      summary: cluster.macroDirective,
+      macroVector,
+      childCount: cluster.children.length,
+      activeCount,
+      supersededCount,
+      expiredCount,
+      healthScore,
+      children: mappedChildren
+    });
+  }
+
+  // If connected to MongoDB, persist macro clusters for aggregation queries
+  if (db && isConnected && activeClusters.length > 0) {
+    try {
+      const col = db.collection('macro_clusters');
+      await col.deleteMany({ workspaceId });
+      const docsToInsert = activeClusters.map(c => ({
+        ...c,
+        workspaceId,
+        updatedAt: new Date()
+      }));
+      await col.insertMany(docsToInsert);
+    } catch (e) {
+      console.warn('[MongoDB] Macro cluster persistence notice:', e.message);
+    }
+  }
+
+  const overallCoherence = activeClusters.length > 0
+    ? Math.round(activeClusters.reduce((sum, c) => sum + c.healthScore, 0) / activeClusters.length)
+    : 100;
+
+  return {
+    clusters: activeClusters,
+    summary: {
+      totalClusters: activeClusters.length,
+      totalDecisions,
+      coherenceScore: overallCoherence
+    }
+  };
+}
+
+export async function searchHierarchicalMemories({ query, workspaceId = 'ws_core', limit = 5 }) {
+  const { embedQuery } = await import('./providers/embedding-provider.js');
+  const queryVector = await embedQuery(query);
+
+  const { clusters } = await buildHierarchicalClusters(workspaceId);
+  if (!clusters || clusters.length === 0) {
+    return {
+      query,
+      matchedCluster: null,
+      resolvedDecisions: [],
+      hierarchicalContext: ''
+    };
+  }
+
+  // 1. Level 1: Match Macro Architectural Domain using centroid vector
+  const scoredClusters = clusters.map(c => {
+    const sim = c.macroVector ? cosineSimilarity(queryVector, c.macroVector) : 0;
+    return { ...c, domainScore: parseFloat(sim.toFixed(4)) };
+  });
+
+  scoredClusters.sort((a, b) => b.domainScore - a.domainScore);
+  const bestCluster = scoredClusters[0];
+
+  // 2. Level 2: Drill down into child decisions of the matched domain
+  const rawMemories = await findMemories({ workspaceId });
+  const childMemDocs = rawMemories.filter(m => bestCluster.children.some(ch => ch.id === m._id.toString()));
+
+  const scoredChildren = childMemDocs.map(m => {
+    const sim = m.embedding ? cosineSimilarity(queryVector, m.embedding) : 0;
+    return {
+      id: m._id.toString(),
+      statement: m.content?.statement,
+      status: m.status,
+      topic: m.topic,
+      owner: m.ownerId,
+      confidence: m.confidence || 0.95,
+      score: parseFloat(sim.toFixed(4)),
+      validUntil: m.validUntil
+    };
+  });
+
+  scoredChildren.sort((a, b) => b.score - a.score);
+
+  const activeChildren = scoredChildren.filter(c => c.status === 'active').slice(0, limit);
+  const supersededChildren = scoredChildren.filter(c => c.status === 'superseded').slice(0, 2);
+
+  // 3. Assemble Hierarchical Context for LLM Grounding
+  const activeLines = activeChildren.map(c => `  • [ACTIVE DECISION] "${c.statement}" (Owner: ${c.owner}, Conf: ${Math.round(c.confidence * 100)}%)`);
+  const supersededLines = supersededChildren.map(c => `  • [SUPERSEDED DIRECTIVE - DO NOT USE] "${c.statement}" (Superseded by newer consensus)`);
+
+  const hierarchicalContext = [
+    `[Hierarchical Memory Grounding - Macro Domain: ${bestCluster.name} (Cluster Match: ${Math.round(bestCluster.domainScore * 100)}%)]:`,
+    `Domain Policy: "${bestCluster.macroDirective}"`,
+    ...(activeLines.length > 0 ? ['Authoritative Child Decisions:', ...activeLines] : []),
+    ...(supersededLines.length > 0 ? ['Historical/Superseded Precedents:', ...supersededLines] : [])
+  ].join('\n');
+
+  return {
+    query,
+    matchedCluster: {
+      id: bestCluster.id,
+      name: bestCluster.name,
+      domainScore: bestCluster.domainScore,
+      macroDirective: bestCluster.macroDirective
+    },
+    resolvedDecisions: scoredChildren.slice(0, limit),
+    hierarchicalContext
+  };
+}
