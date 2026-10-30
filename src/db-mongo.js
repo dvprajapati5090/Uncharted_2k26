@@ -593,3 +593,196 @@ export async function exportVoyagePairs() {
   }
   return pairs;
 }
+
+/**
+ * -------------------------------------------------------------
+ * KNOWLEDGE GRAPH & MONGODB $graphLookup ENGINE (GRAPHRAG)
+ * -------------------------------------------------------------
+ */
+
+export async function addMemoryRelation(sourceId, targetId, type = 'related_to', label = 'Related') {
+  const source = await getMemoryById(sourceId);
+  const target = await getMemoryById(targetId);
+  if (!source || !target) return null;
+
+  const sRel = source.relations || [];
+  if (!sRel.some(r => r.targetId === targetId.toString())) {
+    sRel.push({ targetId: targetId.toString(), type, label });
+    await updateMemoryDocument(sourceId, { relations: sRel });
+  }
+
+  const reciprocalType = type === 'supersedes' ? 'superseded_by' : (type === 'depends_on' ? 'depended_by' : type);
+  const tRel = target.relations || [];
+  if (!tRel.some(r => r.targetId === sourceId.toString())) {
+    tRel.push({ targetId: sourceId.toString(), type: reciprocalType, label: `Reciprocal: ${label}` });
+    await updateMemoryDocument(targetId, { relations: tRel });
+  }
+
+  return { sourceId, targetId, type, label };
+}
+
+export async function getMemoryGraph(workspaceId = 'ws_core') {
+  const memories = await findMemories({ workspaceId });
+  const nodes = [];
+  const edges = [];
+  const edgeKeySet = new Set();
+
+  for (const mem of memories) {
+    const memId = mem._id.toString();
+    nodes.push({
+      id: memId,
+      label: mem.content?.statement || mem.topic,
+      topic: mem.topic,
+      status: mem.status,
+      type: mem.type,
+      confidence: mem.confidence || 0.95,
+      owner: mem.ownerId || 'Team',
+      reason: mem.content?.reason || '',
+      validUntil: mem.validUntil,
+      reinforcementUp: mem.reinforcementUp || 0,
+      reinforcementDown: mem.reinforcementDown || 0
+    });
+
+    // 1. Direct explicit relations
+    if (Array.isArray(mem.relations)) {
+      for (const rel of mem.relations) {
+        const key = `${memId}->${rel.targetId}:${rel.type}`;
+        if (!edgeKeySet.has(key)) {
+          edgeKeySet.add(key);
+          edges.push({
+            id: `edge_${memId}_${rel.targetId}`,
+            source: memId,
+            target: rel.targetId,
+            type: rel.type,
+            label: rel.label || rel.type
+          });
+        }
+      }
+    }
+
+    // 2. Lineage relation from supersedesId
+    if (mem.supersedesId) {
+      const key = `${memId}->${mem.supersedesId}:supersedes`;
+      if (!edgeKeySet.has(key)) {
+        edgeKeySet.add(key);
+        edges.push({
+          id: `edge_sup_${memId}_${mem.supersedesId}`,
+          source: memId,
+          target: mem.supersedesId,
+          type: 'supersedes',
+          label: 'Supersedes'
+        });
+      }
+    }
+  }
+
+  // 3. Infer semantic architectural relationships across nodes if no edges exist
+  for (let i = 0; i < memories.length; i++) {
+    for (let j = i + 1; j < memories.length; j++) {
+      const a = memories[i];
+      const b = memories[j];
+      const aId = a._id.toString();
+      const bId = b._id.toString();
+      const aText = (a.content?.statement || '').toLowerCase();
+      const bText = (b.content?.statement || '').toLowerCase();
+
+      // Check MongoDB <-> Redis caching relationship
+      if ((aText.includes('mongo') && bText.includes('redis')) || (aText.includes('redis') && bText.includes('mongo'))) {
+        const key1 = `${aId}->${bId}:integrates_with`;
+        const key2 = `${bId}->${aId}:integrates_with`;
+        if (!edgeKeySet.has(key1) && !edgeKeySet.has(key2)) {
+          edgeKeySet.add(key1);
+          edges.push({
+            id: `edge_sem_${aId}_${bId}`,
+            source: aText.includes('mongo') ? aId : bId,
+            target: aText.includes('mongo') ? bId : aId,
+            type: 'depends_on',
+            label: 'Caching layer'
+          });
+        }
+      }
+
+      // Check Stack <-> Deployment governance
+      if (b.topic === 'Deployment' && a.topic !== 'Deployment') {
+        const key = `${bId}->${aId}:governs`;
+        if (!edgeKeySet.has(key)) {
+          edgeKeySet.add(key);
+          edges.push({
+            id: `edge_gov_${bId}_${aId}`,
+            source: bId,
+            target: aId,
+            type: 'constrains',
+            label: 'Freeze constraint'
+          });
+        }
+      }
+    }
+  }
+
+  const activeCount = nodes.filter(n => n.status === 'active').length;
+  const supersededCount = nodes.filter(n => n.status === 'superseded').length;
+  const expiredCount = nodes.filter(n => n.status === 'expired').length;
+
+  return {
+    nodes,
+    edges,
+    summary: {
+      totalNodes: nodes.length,
+      totalEdges: edges.length,
+      activeCount,
+      supersededCount,
+      expiredCount
+    }
+  };
+}
+
+export async function traverseGraphRAG(startMemoryId, maxDepth = 2) {
+  const root = await getMemoryById(startMemoryId);
+  if (!root) return { root: null, neighbors: [], graphContextText: '' };
+
+  const idStr = root._id.toString();
+  const graph = await getMemoryGraph(root.workspaceId);
+
+  // BFS traversal up to maxDepth
+  const visited = new Set([idStr]);
+  const queue = [{ id: idStr, depth: 0 }];
+  const neighbors = [];
+
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift();
+    if (depth >= maxDepth) continue;
+
+    const connectedEdges = graph.edges.filter(e => e.source === id || e.target === id);
+    for (const edge of connectedEdges) {
+      const neighborId = edge.source === id ? edge.target : edge.source;
+      if (!visited.has(neighborId)) {
+        visited.add(neighborId);
+        const neighborNode = graph.nodes.find(n => n.id === neighborId);
+        if (neighborNode) {
+          neighbors.push({
+            node: neighborNode,
+            relationship: edge.label,
+            type: edge.type,
+            depth: depth + 1
+          });
+          queue.push({ id: neighborId, depth: depth + 1 });
+        }
+      }
+    }
+  }
+
+  // Format Graph Context for prompt injection
+  const lineageLines = neighbors.map(n => 
+    `• Linked (${n.relationship}) [${n.node.status.toUpperCase()}]: "${n.node.label}" (Confidence: ${Math.round(n.node.confidence * 100)}%)`
+  );
+
+  const graphContextText = lineageLines.length > 0
+    ? `\n[Architectural Knowledge Graph Lineage (${neighbors.length} connected nodes)]:\n` + lineageLines.join('\n')
+    : '';
+
+  return {
+    root,
+    neighbors,
+    graphContextText
+  };
+}

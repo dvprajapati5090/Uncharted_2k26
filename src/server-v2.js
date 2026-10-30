@@ -23,7 +23,10 @@ import {
   getFeedbackList,
   getTrainingStats,
   exportDpoDataset,
-  exportVoyagePairs
+  exportVoyagePairs,
+  getMemoryGraph,
+  traverseGraphRAG,
+  addMemoryRelation
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -448,6 +451,27 @@ const server = http.createServer(async (req, res) => {
       }
       const stats = await getTrainingStats();
       return sendJson(res, 201, { status: 'synthetic_pairs_generated', count: created.length, stats });
+    }
+
+    // ----------------------------------------------------
+    // 6.8. KNOWLEDGE GRAPH & GRAPHRAG LINEAGE API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/graph') {
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const graph = await getMemoryGraph(workspaceId);
+      return sendJson(res, 200, graph);
+    }
+
+    if (req.method === 'GET' && pathname.startsWith('/api/graph/') && !pathname.endsWith('/link')) {
+      const id = pathname.split('/')[3];
+      const result = await traverseGraphRAG(id, 2);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/graph/link') {
+      const body = await parseBody(req);
+      const link = await addMemoryRelation(body.sourceId, body.targetId, body.type, body.label);
+      return sendJson(res, 201, { success: true, link });
     }
 
     // ----------------------------------------------------
