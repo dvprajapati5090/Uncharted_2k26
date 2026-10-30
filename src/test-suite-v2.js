@@ -8,7 +8,10 @@ import {
   wipeAllStoredData,
   recordFeedback,
   getTrainingStats,
-  exportDpoDataset
+  exportDpoDataset,
+  getMemoryGraph,
+  traverseGraphRAG,
+  addMemoryRelation
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -184,5 +187,18 @@ assert(dpoData.length > 0, 'DPO dataset must contain exported training pairs');
 assert(dpoData[0].chosen && dpoData[0].rejected && dpoData[0].prompt, 'DPO items must have prompt, chosen, and rejected');
 console.log('✔ Passed: Dynamic confidence calibration and DPO training export verified.\n');
 
-console.log('🎉 ALL 8 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 9: Architectural Knowledge Graph & GraphRAG Lineage
+// ----------------------------------------------------
+console.log('▶ TEST 9: Architectural Knowledge Graph & GraphRAG Lineage');
+const graph = await getMemoryGraph('ws_core');
+assert(graph.nodes.length > 0, 'Knowledge graph must contain nodes');
+assert(graph.edges.length > 0, 'Knowledge graph must contain lineage edges');
+
+// Traversal from approval to superseded constraint
+const traversal = await traverseGraphRAG(res3.extracted._id, 2);
+assert(traversal.neighbors.length > 0, 'GraphRAG traversal must resolve connected lineage');
+console.log('✔ Passed: Multi-hop graph lineage and GraphRAG traversal verified.\n');
+
+console.log('🎉 ALL 9 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

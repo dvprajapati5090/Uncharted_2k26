@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   BrainCircuit,
   Building2,
@@ -27,7 +27,11 @@ import {
   ThumbsDown,
   Download,
   TrendingUp,
-  Award
+  Award,
+  Network,
+  Share2,
+  Link2,
+  Layers
 } from 'lucide-react';
 
 export default function App() {
@@ -52,6 +56,15 @@ export default function App() {
   const [allTeams, setAllTeams] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [ledgerFilter, setLedgerFilter] = useState('all');
+  const [ledgerView, setLedgerView] = useState('cards'); // 'cards' | 'graph'
+  const [graphData, setGraphData] = useState({ nodes: [], edges: [], summary: {} });
+  const [selectedGraphNode, setSelectedGraphNode] = useState(null);
+  const [graphLineage, setGraphLineage] = useState(null);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkSource, setLinkSource] = useState('');
+  const [linkTarget, setLinkTarget] = useState('');
+  const [linkType, setLinkType] = useState('depends_on');
+  const [linkLabel, setLinkLabel] = useState('');
   const [activeInspection, setActiveInspection] = useState(null);
   const [inspectOpen, setInspectOpen] = useState(false);
   const [timeMachineOpen, setTimeMachineOpen] = useState(false);
@@ -215,6 +228,83 @@ export default function App() {
       showToast('Synthetic generation failed', 'error');
     }
   };
+
+  const loadGraphData = async () => {
+    try {
+      const res = await fetch(`/api/graph?workspaceId=${activeTeam?.id || 'ws_core'}`);
+      const data = await res.json();
+      setGraphData(data);
+      if (data.nodes?.length > 0 && !selectedGraphNode) {
+        handleSelectGraphNode(data.nodes[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load knowledge graph:', err);
+    }
+  };
+
+  const handleSelectGraphNode = async (node) => {
+    setSelectedGraphNode(node);
+    try {
+      const res = await fetch(`/api/graph/${node.id}`);
+      const data = await res.json();
+      setGraphLineage(data);
+    } catch (err) {
+      console.error('Failed to fetch node graph lineage:', err);
+    }
+  };
+
+  const handleSaveLink = async (e) => {
+    e.preventDefault();
+    if (!linkSource || !linkTarget || linkSource === linkTarget) {
+      showToast('Please select two distinct memory nodes to link', 'warning');
+      return;
+    }
+    try {
+      await fetch('/api/graph/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceId: linkSource,
+          targetId: linkTarget,
+          type: linkType,
+          label: linkLabel || linkType
+        })
+      });
+      showToast('Knowledge graph link established', 'success');
+      setLinkModalOpen(false);
+      setLinkLabel('');
+      loadGraphData();
+    } catch (err) {
+      showToast('Error linking nodes', 'error');
+    }
+  };
+
+  const nodePositions = useMemo(() => {
+    const nodes = graphData.nodes || [];
+    const count = nodes.length;
+    const positions = {};
+    if (count === 0) return positions;
+
+    const width = 860;
+    const height = 540;
+    const cx = width / 2;
+    const cy = height / 2;
+    const rx = Math.min(320, width * 0.38);
+    const ry = Math.min(200, height * 0.36);
+
+    nodes.forEach((n, idx) => {
+      if (count === 1) {
+        positions[n.id] = { x: cx, y: cy };
+      } else {
+        const angle = (idx / count) * 2 * Math.PI - Math.PI / 2;
+        positions[n.id] = {
+          x: Math.round(cx + rx * Math.cos(angle)),
+          y: Math.round(cy + ry * Math.sin(angle))
+        };
+      }
+    });
+    return positions;
+  }, [graphData.nodes]);
 
   // 3. Message Send Handler
   const handleSendMessage = async (e) => {
@@ -729,29 +819,71 @@ export default function App() {
 
         {/* VIEW 2: MEMORY LEDGER */}
         {activeTab === 'ledger' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+            {/* Header / Subnav */}
+            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Database className="w-4 h-4 text-indigo-400" /> Structured Memory Ledger (MongoDB Atlas)
+                  <Database className="w-4 h-4 text-indigo-400" />
+                  Structured Memory Ledger (MongoDB Atlas)
                 </h2>
                 <p className="text-[11px] text-slate-400">Every memory is an authoritative document with 1024D Voyage embeddings.</p>
               </div>
 
               <div className="flex items-center gap-2">
+                {/* View Mode Toggle */}
                 <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex text-xs">
-                  {['all', 'active', 'superseded', 'expired'].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setLedgerFilter(filter)}
-                      className={`px-3 py-1 rounded-lg font-medium capitalize transition ${
-                        ledgerFilter === filter ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setLedgerView('cards')}
+                    className={`px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition ${
+                      ledgerView === 'cards' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Cards
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLedgerView('graph');
+                      loadGraphData();
+                    }}
+                    className={`px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition ${
+                      ledgerView === 'graph' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Network className="w-3.5 h-3.5" /> Knowledge Graph & Lineage
+                  </button>
                 </div>
+
+                {ledgerView === 'cards' && (
+                  <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex text-xs">
+                    {['all', 'active', 'superseded', 'expired'].map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setLedgerFilter(filter)}
+                        className={`px-3 py-1 rounded-lg font-medium capitalize transition ${
+                          ledgerFilter === filter ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {ledgerView === 'graph' && (
+                  <button
+                    onClick={() => {
+                      if (memories.length >= 2) {
+                        setLinkSource(memories[0].id);
+                        setLinkTarget(memories[1].id);
+                      }
+                      setLinkModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1.5 transition shadow"
+                  >
+                    <Link2 className="w-3.5 h-3.5" /> Link Lineage
+                  </button>
+                )}
 
                 <button
                   onClick={() => openAddModal()}
@@ -762,109 +894,489 @@ export default function App() {
               </div>
             </div>
 
-            {/* Memory Cards Grid */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {memories.length === 0 ? (
-                <div className="text-center py-24 text-slate-500 space-y-2">
-                  <Database className="w-8 h-8 mx-auto text-slate-600" />
-                  <p className="text-xs font-semibold text-slate-400">No memory documents found.</p>
-                  <p className="text-[11px] text-slate-500">Post a decision in chat or click "+ Add Decision".</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-                  {memories.map((mem) => {
-                    const isPast = mem.valid_until && new Date() > new Date(mem.valid_until);
-                    return (
-                      <div
-                        key={mem.id}
-                        className={`memory-card bg-slate-900 border rounded-xl p-4 flex flex-col justify-between space-y-3 ${
-                          mem.status === 'active'
-                            ? 'border-emerald-800/40 shadow-emerald-950/20'
-                            : mem.status === 'superseded'
-                            ? 'border-amber-800/40 shadow-amber-950/20'
-                            : 'border-slate-800 opacity-80'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="font-bold text-xs text-white">{mem.topic}</span>
-                            <span
-                              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                mem.status === 'active'
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                  : mem.status === 'superseded'
-                                  ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
-                              }`}
-                            >
-                              {mem.status}
-                            </span>
+            {/* Content: Cards View vs Knowledge Graph View */}
+            {ledgerView === 'cards' ? (
+              <div className="flex-1 overflow-y-auto p-4">
+                {memories.length === 0 ? (
+                  <div className="text-center py-24 text-slate-500 space-y-2">
+                    <Database className="w-8 h-8 mx-auto text-slate-600" />
+                    <p className="text-xs font-semibold text-slate-400">No memory documents found.</p>
+                    <p className="text-[11px] text-slate-500">Post a decision in chat or click "+ Add Decision".</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                    {memories.map((mem) => {
+                      const isPast = mem.valid_until && new Date() > new Date(mem.valid_until);
+                      return (
+                        <div
+                          key={mem.id}
+                          className={`memory-card bg-slate-900 border rounded-xl p-4 flex flex-col justify-between space-y-3 ${
+                            mem.status === 'active'
+                              ? 'border-emerald-800/40 shadow-emerald-950/20'
+                              : mem.status === 'superseded'
+                              ? 'border-amber-800/40 shadow-amber-950/20'
+                              : 'border-slate-800 opacity-80'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-bold text-xs text-white">{mem.topic}</span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                  mem.status === 'active'
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    : mem.status === 'superseded'
+                                    ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                }`}
+                              >
+                                {mem.status}
+                              </span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-100 mb-1">{mem.decision}</p>
+                            {mem.reason && (
+                              <div className="text-[11px] text-slate-300 bg-slate-950/80 p-2 rounded-lg border border-slate-800">
+                                <span className="text-slate-500 font-medium">Why:</span> {mem.reason}
+                              </div>
+                            )}
+
+                            {mem.superseded_by && (
+                              <div className="text-[10px] text-amber-400 font-medium flex items-center gap-1 mt-2">
+                                <ArrowRight className="w-3 h-3" /> Superseded by newer directive
+                              </div>
+                            )}
+
+                            {mem.valid_until && (
+                              <div
+                                className={`text-[10px] font-medium flex items-center gap-1 mt-1.5 ${
+                                  isPast ? 'text-rose-400' : 'text-indigo-400'
+                                }`}
+                              >
+                                <Clock className="w-3 h-3" /> {isPast ? 'Expired:' : 'Valid until:'}{' '}
+                                {new Date(mem.valid_until).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              </div>
+                            )}
                           </div>
-                          <p className="text-xs font-semibold text-slate-100 mb-1">{mem.decision}</p>
-                          {mem.reason && (
-                            <div className="text-[11px] text-slate-300 bg-slate-950/80 p-2 rounded-lg border border-slate-800">
-                              <span className="text-slate-500 font-medium">Why:</span> {mem.reason}
-                            </div>
-                          )}
 
-                          {mem.superseded_by && (
-                            <div className="text-[10px] text-amber-400 font-medium flex items-center gap-1 mt-2">
-                              <ArrowRight className="w-3 h-3" /> Superseded by newer directive
+                          <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                            <div className="flex items-center gap-2">
+                              <span>Owner: <strong className="text-slate-300">{mem.owner}</strong></span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono">
+                                {Math.round((mem.confidence || 0.95) * 100)}% conf
+                              </span>
+                              {(mem.reinforcementUp || 0) > 0 && (
+                                <span className="text-[10px] text-emerald-400 flex items-center gap-0.5 font-bold">
+                                  <ThumbsUp className="w-2.5 h-2.5" /> +{mem.reinforcementUp}
+                                </span>
+                              )}
+                              {(mem.reinforcementDown || 0) > 0 && (
+                                <span className="text-[10px] text-rose-400 flex items-center gap-0.5 font-bold">
+                                  <ThumbsDown className="w-2.5 h-2.5" /> -{mem.reinforcementDown}
+                                </span>
+                              )}
                             </div>
-                          )}
-
-                          {mem.valid_until && (
-                            <div
-                              className={`text-[10px] font-medium flex items-center gap-1 mt-1.5 ${
-                                isPast ? 'text-rose-400' : 'text-indigo-400'
-                              }`}
-                            >
-                              <Clock className="w-3 h-3" /> {isPast ? 'Expired:' : 'Valid until:'}{' '}
-                              {new Date(mem.valid_until).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={() => openAddModal(mem)}
+                                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200"
+                                title="Edit decision"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMemory(mem.id)}
+                                className="p-1.5 rounded hover:bg-rose-950/60 text-slate-400 hover:text-rose-400"
+                                title="Forget / Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                          )}
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* KNOWLEDGE GRAPH & GRAPHRAG MULTI-HOP LINEAGE EXPLORER */
+              <div className="flex-1 flex overflow-hidden">
+                {/* Visual Topology Canvas */}
+                <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-950">
+                  {/* Canvas Stats Bar */}
+                  <div className="px-4 py-2 border-b border-slate-800/80 bg-slate-900/30 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-800 text-indigo-300 font-mono text-[10px]">
+                        Nodes: <strong>{graphData.summary?.totalNodes || graphData.nodes?.length || 0}</strong>
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[10px]">
+                        Edges: <strong>{graphData.summary?.totalEdges || graphData.edges?.length || 0}</strong>
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[10px]">
+                        Active: <strong>{graphData.summary?.activeCount || 0}</strong>
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-800 text-amber-300 font-mono text-[10px]">
+                        Superseded: <strong>{graphData.summary?.supersededCount || 0}</strong>
+                      </span>
+                    </div>
 
-                        <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                          <div className="flex items-center gap-2">
-                            <span>Owner: <strong className="text-slate-300">{mem.owner}</strong></span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono">
-                              {Math.round((mem.confidence || 0.95) * 100)}% conf
-                            </span>
-                            {(mem.reinforcementUp || 0) > 0 && (
-                              <span className="text-[10px] text-emerald-400 flex items-center gap-0.5 font-bold">
-                                <ThumbsUp className="w-2.5 h-2.5" /> +{mem.reinforcementUp}
-                              </span>
-                            )}
-                            {(mem.reinforcementDown || 0) > 0 && (
-                              <span className="text-[10px] text-rose-400 flex items-center gap-0.5 font-bold">
-                                <ThumbsDown className="w-2.5 h-2.5" /> -{mem.reinforcementDown}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={() => openAddModal(mem)}
-                              className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200"
-                              title="Edit decision"
+                    <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Active
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Superseded
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> Expired
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* SVG Topology Viewport */}
+                  <div className="flex-1 relative overflow-auto flex items-center justify-center p-4">
+                    {(!graphData.nodes || graphData.nodes.length === 0) ? (
+                      <div className="text-center py-20 text-slate-500 space-y-2">
+                        <Network className="w-10 h-10 mx-auto text-slate-600 animate-pulse" />
+                        <p className="text-xs font-semibold text-slate-400">No nodes in knowledge graph.</p>
+                        <p className="text-[11px] text-slate-500">Seed demo data or post decisions to visualize relationship edges.</p>
+                      </div>
+                    ) : (
+                      <svg
+                        viewBox="0 0 860 540"
+                        className="w-full h-full max-w-4xl max-h-[580px] select-none"
+                      >
+                        {/* Background subtle grid */}
+                        <defs>
+                          <pattern id="graph-grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                            <circle cx="1" cy="1" r="1" fill="#334155" opacity="0.3" />
+                          </pattern>
+                          <marker
+                            id="arrow-generic"
+                            viewBox="0 0 10 10"
+                            refX="10"
+                            refY="5"
+                            markerWidth="6"
+                            markerHeight="6"
+                            orient="auto-start-reverse"
+                          >
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#818cf8" />
+                          </marker>
+                          <marker
+                            id="arrow-supersedes"
+                            viewBox="0 0 10 10"
+                            refX="10"
+                            refY="5"
+                            markerWidth="6"
+                            markerHeight="6"
+                            orient="auto-start-reverse"
+                          >
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
+                          </marker>
+                          <marker
+                            id="arrow-caching"
+                            viewBox="0 0 10 10"
+                            refX="10"
+                            refY="5"
+                            markerWidth="6"
+                            markerHeight="6"
+                            orient="auto-start-reverse"
+                          >
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#c084fc" />
+                          </marker>
+                        </defs>
+
+                        <rect width="860" height="540" fill="url(#graph-grid)" />
+
+                        {/* Directed Edges */}
+                        {graphData.edges?.map((edge) => {
+                          const p1 = nodePositions[edge.source];
+                          const p2 = nodePositions[edge.target];
+                          if (!p1 || !p2) return null;
+
+                          const dx = p2.x - p1.x;
+                          const dy = p2.y - p1.y;
+                          const dist = Math.sqrt(dx * dx + dy * dy);
+                          if (dist === 0) return null;
+
+                          // Trim lines so they don't enter inside node rectangles
+                          const trim = 50;
+                          const x1 = p1.x + (dx / dist) * trim;
+                          const y1 = p1.y + (dy / dist) * trim;
+                          const x2 = p2.x - (dx / dist) * trim;
+                          const y2 = p2.y - (dy / dist) * trim;
+
+                          const mx = (x1 + x2) / 2;
+                          const my = (y1 + y2) / 2;
+
+                          const isSupersedes = edge.type === 'supersedes';
+                          const isCaching = edge.type === 'depends_on' || edge.label?.toLowerCase().includes('caching');
+
+                          const strokeColor = isSupersedes ? '#f59e0b' : isCaching ? '#a855f7' : '#818cf8';
+                          const markerId = isSupersedes ? 'url(#arrow-supersedes)' : isCaching ? 'url(#arrow-caching)' : 'url(#arrow-generic)';
+
+                          return (
+                            <g key={edge.id} className="transition-all duration-300">
+                              <line
+                                x1={x1}
+                                y1={y1}
+                                x2={x2}
+                                y2={y2}
+                                stroke={strokeColor}
+                                strokeWidth="2"
+                                strokeDasharray={isSupersedes ? '4 3' : 'none'}
+                                markerEnd={markerId}
+                                opacity="0.85"
+                              />
+                              {/* Edge Label Pill */}
+                              <rect
+                                x={mx - 38}
+                                y={my - 9}
+                                width="76"
+                                height="18"
+                                rx="5"
+                                fill="#090d16"
+                                stroke={strokeColor}
+                                strokeWidth="1"
+                                opacity="0.95"
+                              />
+                              <text
+                                x={mx}
+                                y={my + 3.5}
+                                textAnchor="middle"
+                                fill="#cbd5e1"
+                                fontSize="9"
+                                fontWeight="bold"
+                                className="pointer-events-none select-none font-sans"
+                              >
+                                {edge.label?.slice(0, 14)}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Nodes */}
+                        {graphData.nodes?.map((node) => {
+                          const pos = nodePositions[node.id];
+                          if (!pos) return null;
+                          const isSelected = selectedGraphNode?.id === node.id;
+                          const isSuperseded = node.status === 'superseded';
+                          const isExpired = node.status === 'expired';
+
+                          const strokeColor = isSelected
+                            ? '#c084fc'
+                            : isSuperseded
+                            ? '#f59e0b'
+                            : isExpired
+                            ? '#f43f5e'
+                            : '#10b981';
+
+                          return (
+                            <g
+                              key={node.id}
+                              onClick={() => handleSelectGraphNode(node)}
+                              className="cursor-pointer group transition-all"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMemory(mem.id)}
-                              className="p-1.5 rounded hover:bg-rose-950/60 text-slate-400 hover:text-rose-400"
-                              title="Forget / Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                              {/* Glow on selection */}
+                              {isSelected && (
+                                <rect
+                                  x={pos.x - 84}
+                                  y={pos.y - 34}
+                                  width="168"
+                                  height="68"
+                                  rx="12"
+                                  fill="none"
+                                  stroke="#a855f7"
+                                  strokeWidth="6"
+                                  opacity="0.35"
+                                  className="animate-pulse"
+                                />
+                              )}
+
+                              {/* Node Rect */}
+                              <rect
+                                x={pos.x - 80}
+                                y={pos.y - 30}
+                                width="160"
+                                height="60"
+                                rx="10"
+                                fill="#0f172a"
+                                stroke={strokeColor}
+                                strokeWidth={isSelected ? '2.5' : '1.5'}
+                                className="transition-all duration-200 group-hover:fill-slate-800"
+                              />
+
+                              {/* Topic Badge */}
+                              <text
+                                x={pos.x - 70}
+                                y={pos.y - 12}
+                                fill="#94a3b8"
+                                fontSize="10"
+                                fontWeight="bold"
+                                className="font-sans"
+                              >
+                                {node.topic?.toUpperCase()}
+                              </text>
+
+                              {/* Status Dot */}
+                              <circle
+                                cx={pos.x + 65}
+                                cy={pos.y - 15}
+                                r="4"
+                                fill={strokeColor}
+                              />
+
+                              {/* Decision Statement preview */}
+                              <text
+                                x={pos.x - 70}
+                                y={pos.y + 6}
+                                fill="#f8fafc"
+                                fontSize="10"
+                                fontWeight="600"
+                                className="font-sans"
+                              >
+                                {node.statement?.length > 22 ? `${node.statement.slice(0, 22)}...` : node.statement}
+                              </text>
+
+                              {/* Owner */}
+                              <text
+                                x={pos.x - 70}
+                                y={pos.y + 20}
+                                fill="#64748b"
+                                fontSize="9"
+                                className="font-mono"
+                              >
+                                by {node.owner || 'team'}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Panel: GraphRAG Multi-Hop Lineage Inspector */}
+                <div className="w-80 md:w-96 border-l border-slate-800 bg-slate-900/60 flex flex-col overflow-y-auto">
+                  <div className="p-3.5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-purple-400" />
+                      GraphRAG Multi-Hop Lineage
+                    </h3>
+                    <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-mono text-[9px] font-bold">
+                      $graphLookup
+                    </span>
+                  </div>
+
+                  {!selectedGraphNode ? (
+                    <div className="p-6 text-center text-slate-500 space-y-2">
+                      <Network className="w-8 h-8 mx-auto text-slate-600" />
+                      <p className="text-xs font-medium text-slate-400">Select any node on the graph</p>
+                      <p className="text-[11px] text-slate-500">Inspect multi-hop architectural dependencies, upstream/downstream relations, and RAG context.</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-4 text-xs">
+                      {/* Active Node Detail Card */}
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-indigo-400 text-xs">{selectedGraphNode.topic}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              selectedGraphNode.status === 'active'
+                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                : selectedGraphNode.status === 'superseded'
+                                ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {selectedGraphNode.status}
+                          </span>
+                        </div>
+                        <p className="text-slate-100 font-semibold text-xs leading-relaxed">
+                          {selectedGraphNode.statement}
+                        </p>
+                        <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
+                          <span>Owner: <strong className="text-slate-300">{selectedGraphNode.owner}</strong></span>
+                          <span>Confidence: <strong>{Math.round((selectedGraphNode.confidence || 0.95) * 100)}%</strong></span>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Multi-Hop Traversed Neighbors */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-purple-400" />
+                            Multi-Hop Lineage Path
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {graphLineage?.neighbors?.length || 0} Connected
+                          </span>
+                        </div>
+
+                        {(!graphLineage?.neighbors || graphLineage.neighbors.length === 0) ? (
+                          <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-slate-500 text-[11px] text-center">
+                            Direct root memory. No multi-hop dependencies linked yet.
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {graphLineage.neighbors.map((nbr, idx) => (
+                              <div
+                                key={idx}
+                                className="bg-slate-950 p-2.5 rounded-xl border border-purple-900/40 hover:border-purple-700/60 transition space-y-1"
+                              >
+                                <div className="flex items-center justify-between text-[10px]">
+                                  <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-bold border border-purple-800">
+                                    Hop {nbr.depth} • {nbr.direction === 'outgoing' ? '→ Out' : '← In'}
+                                  </span>
+                                  <span className="text-amber-400 font-medium capitalize">
+                                    {nbr.label || nbr.relation}
+                                  </span>
+                                </div>
+                                <p className="text-slate-200 text-[11px] font-medium leading-snug">
+                                  {nbr.node?.statement}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* GraphRAG Prompt Context Box */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                            GraphRAG Prompt Grounding
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-mono">Zero Hallucination</span>
+                        </div>
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[10px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                          {graphLineage?.graphContextText || 'Tracing relational graph context...'}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          MongoDB Atlas traverses architectural edges up to 2 hops, grounding AI responses with complete relational context.
+                        </p>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="pt-2 border-t border-slate-800 flex gap-2">
+                        <button
+                          onClick={() => {
+                            setLinkSource(selectedGraphNode.id);
+                            const other = memories.find(m => m.id !== selectedGraphNode.id);
+                            if (other) setLinkTarget(other.id);
+                            setLinkModalOpen(true);
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                        >
+                          <Link2 className="w-3.5 h-3.5" /> Link To Another Memory
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1241,6 +1753,115 @@ export default function App() {
                   className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
                 >
                   Save Decision
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: LINK KNOWLEDGE GRAPH LINEAGE */}
+      {linkModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-purple-400" /> Connect Knowledge Graph Lineage
+              </h3>
+              <button onClick={() => setLinkModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              Establish a directed relationship edge between two authoritative memories to enable multi-hop GraphRAG traversal in MongoDB Atlas.
+            </p>
+
+            <form onSubmit={handleSaveLink} className="space-y-3.5">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Source Memory (Origin)</label>
+                <select
+                  value={linkSource}
+                  onChange={(e) => setLinkSource(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                >
+                  <option value="">Select origin memory...</option>
+                  {memories.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      [{m.topic}] {m.decision?.slice(0, 50)}...
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Relationship Type</label>
+                  <select
+                    value={linkType}
+                    onChange={(e) => {
+                      setLinkType(e.target.value);
+                      if (!linkLabel) {
+                        if (e.target.value === 'caching_layer') setLinkLabel('Caching layer');
+                        else if (e.target.value === 'supersedes') setLinkLabel('Supersedes');
+                        else if (e.target.value === 'depends_on') setLinkLabel('Depends on');
+                        else if (e.target.value === 'constrains') setLinkLabel('Freeze constraint');
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                  >
+                    <option value="depends_on">Depends On (Dependency)</option>
+                    <option value="caching_layer">Caching Layer (Integration)</option>
+                    <option value="supersedes">Supersedes (Override)</option>
+                    <option value="constrains">Constrains (Governance)</option>
+                    <option value="implements">Implements (Execution)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Edge Label</label>
+                  <input
+                    type="text"
+                    value={linkLabel}
+                    onChange={(e) => setLinkLabel(e.target.value)}
+                    placeholder="e.g. Caching layer"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Target Memory (Destination)</label>
+                <select
+                  value={linkTarget}
+                  onChange={(e) => setLinkTarget(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                >
+                  <option value="">Select target memory...</option>
+                  {memories
+                    .filter((m) => m.id !== linkSource)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        [{m.topic}] {m.decision?.slice(0, 50)}...
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setLinkModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold flex items-center gap-1.5 shadow"
+                >
+                  <Link2 className="w-3.5 h-3.5" /> Establish Link
                 </button>
               </div>
             </form>
