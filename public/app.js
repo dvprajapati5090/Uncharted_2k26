@@ -1064,13 +1064,12 @@ document.getElementById('btn-scenario-expiry').onclick = async () => {
   }, 1000);
 };
 
-// Reset All Data
+// Wipe All Data to start 100% clean from scratch
 document.getElementById('btn-seed-reset').onclick = async () => {
-  if (!confirm('Reset memory database to initial state?')) return;
+  if (!confirm('Wipe all data and start completely fresh from scratch?')) return;
   try {
-    await fetch('/api/demo/seed', { method: 'POST' });
-    await fetch('/api/coding/demo-collision', { method: 'POST' });
-    showToast('Database reset to fresh baseline', 'info');
+    await fetch('/api/wipe', { method: 'POST' });
+    showToast('All prebuilt data wiped! Starting completely clean from scratch.', 'success');
     loadChannels();
     loadMemories();
     loadMessages();
@@ -1078,7 +1077,7 @@ document.getElementById('btn-seed-reset').onclick = async () => {
     loadCodingStats();
     loadCodingTasks();
   } catch (err) {
-    console.error('Failed to reset', err);
+    console.error('Failed to wipe data', err);
   }
 };
 

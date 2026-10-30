@@ -18,7 +18,8 @@ import {
   getCodeTaskById,
   deleteCodeTask,
   getCodingStats,
-  clearAllCodeTasks
+  clearAllCodeTasks,
+  wipeAllData
 } from './db.js';
 import {
   processMessageForMemory,
@@ -303,7 +304,13 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // 12. POST /api/demo/seed (Reset and seed demo data)
+    // 12. POST /api/wipe (Wipe all prebuilt and stored data to start 100% from scratch)
+    if (req.method === 'POST' && pathname === '/api/wipe') {
+      wipeAllData();
+      return sendJson(res, 200, { message: 'All data wiped successfully. System is completely blank and ready for fresh input.' });
+    }
+
+    // 13. POST /api/demo/seed (Reset and seed demo data)
     if (req.method === 'POST' && pathname === '/api/demo/seed') {
       const resData = seedDemoData();
       return sendJson(res, 200, resData);
@@ -420,23 +427,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Seed initial data if DB empty
-seedDemoData();
-if (getAllCodeTasks().length === 0) {
-  claimAndExecuteTask(
-    'Candidate A',
-    'Create a PostgreSQL connection pool with retry logic and error handler in Node.js',
-    { candidateRole: 'Backend Dev', status: 'in_progress' }
-  );
-  claimAndExecuteTask(
-    'Elena',
-    'Build a React user profile card component using Tailwind CSS',
-    { candidateRole: 'Frontend Dev', status: 'completed' }
-  );
-}
-
+// Server startup (Clean slate - zero prebuilt data)
 server.listen(PORT, () => {
   console.log(`=======================================================`);
   console.log(`🧠 Team Memory Assistant running at http://localhost:${PORT}`);
+  console.log(`Clean state: Ready for fresh inputs from scratch.`);
   console.log(`=======================================================`);
 });

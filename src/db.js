@@ -265,6 +265,19 @@ export function clearAllMemories() {
   db.exec('DELETE FROM audit_log;');
 }
 
+export function clearAllConversations() {
+  const db = getDb();
+  db.exec('DELETE FROM conversations;');
+}
+
+export function wipeAllData() {
+  const db = getDb();
+  db.exec('DELETE FROM memories;');
+  db.exec('DELETE FROM conversations;');
+  db.exec('DELETE FROM code_tasks;');
+  db.exec('DELETE FROM audit_log;');
+}
+
 export function clearChannelMessages(channel) {
   const db = getDb();
   db.prepare('DELETE FROM conversations WHERE channel = ?').run(channel);
