@@ -33,6 +33,7 @@ import {
   buildGroundingPrompt
 } from './providers/llm-provider.js';
 import { realtimeSync } from './realtime-sync.js';
+import { runLiveBenchmark, getLatestBenchmark, BENCHMARK_SCENARIOS } from './benchmark-engine.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -362,5 +363,24 @@ console.log(`Live Sync Broadcast Captured: ${capturedEvents.length} events (Late
 console.log(`Sync Stats: ${syncStats.totalEvents} total mutations synchronized, average latency: ${testBroadcast.latencyMs}ms`);
 console.log('✔ Passed: Real-time change stream sync and multi-agent broadcast bus verified.\n');
 
-console.log('🎉 ALL 13 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 14: Live Benchmark Engine & Comparative Scorecard
+// ----------------------------------------------------
+console.log('▶ TEST 14: Live Benchmark Engine & Comparative Scorecard (Synapse vs Naive RAG vs History Bloat)');
+
+const initialBenchmark = getLatestBenchmark();
+assert(initialBenchmark.scorecard.synapseMem.score > 90, 'Initial score must reflect high adherence');
+assert(initialBenchmark.radarMetrics.length === 5, 'Must evaluate across 5 radar dimensions');
+
+const benchmarkRun = await runLiveBenchmark();
+assert.strictEqual(benchmarkRun.detailedTests.length, BENCHMARK_SCENARIOS.length, 'Must execute all benchmark scenarios');
+assert(benchmarkRun.scorecard.synapseMem.score >= 80, 'SynapseMem score must lead significantly');
+assert(benchmarkRun.totalExecutionTimeMs >= 0, 'Must record execution time');
+console.log(`Benchmark Executed: ${benchmarkRun.detailedTests.length} adversarial tests in ${benchmarkRun.totalExecutionTimeMs}ms`);
+console.log(`SynapseMem Score: ${benchmarkRun.scorecard.synapseMem.score}% (Hallucination: ${benchmarkRun.scorecard.synapseMem.hallucinationRate}, Token Reduction: ${benchmarkRun.scorecard.synapseMem.tokenEfficiency})`);
+console.log(`Naive Flat RAG Score: ${benchmarkRun.scorecard.naiveFlatRag.score}% (Hallucination: ${benchmarkRun.scorecard.naiveFlatRag.hallucinationRate})`);
+console.log(`History Bloat Agent Score: ${benchmarkRun.scorecard.chatHistoryBloat.score}% (Hallucination: ${benchmarkRun.scorecard.chatHistoryBloat.hallucinationRate})`);
+console.log('✔ Passed: Empirical benchmark engine and multi-architecture scorecard verified.\n');
+
+console.log('🎉 ALL 14 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

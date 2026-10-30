@@ -52,6 +52,7 @@ import {
   AGENT_PERSONAS
 } from './consensus-engine-v2.js';
 import { realtimeSync } from './realtime-sync.js';
+import { runLiveBenchmark, getLatestBenchmark } from './benchmark-engine.js';
 
 validateConfig();
 
@@ -651,6 +652,19 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const event = realtimeSync.broadcast(body);
       return sendJson(res, 201, { success: true, event });
+    }
+
+    // ----------------------------------------------------
+    // 6.12. BENCHMARK & COMPARATIVE EVALUATION API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/benchmark/latest') {
+      return sendJson(res, 200, getLatestBenchmark());
+    }
+
+    if (req.method === 'POST' && pathname === '/api/benchmark/run') {
+      const body = await parseBody(req).catch(() => ({}));
+      const results = await runLiveBenchmark(body);
+      return sendJson(res, 200, results);
     }
 
     // ----------------------------------------------------
