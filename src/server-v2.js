@@ -54,6 +54,7 @@ import {
 import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark } from './benchmark-engine.js';
 import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
+import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
 
 validateConfig();
 
@@ -692,6 +693,27 @@ const server = http.createServer(async (req, res) => {
         user: { id: body.userId || 'u_sarah' }
       });
       return sendJson(res, 200, resolution);
+    }
+
+    // ----------------------------------------------------
+    // 6.14. ENTERPRISE ADR & MEMORY DOSSIER EXPORT API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/export/adr-dossier') {
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const format = parsedUrl.searchParams.get('format') || 'json';
+      const dossier = await generateEnterpriseAdrDossier(workspaceId);
+
+      if (format === 'markdown') {
+        res.writeHead(200, {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${dossier.filename}"`,
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(dossier.markdown);
+        return;
+      }
+
+      return sendJson(res, 200, { success: true, dossier });
     }
 
     // ----------------------------------------------------
