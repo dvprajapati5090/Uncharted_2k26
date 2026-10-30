@@ -1128,29 +1128,37 @@ export default function App() {
                                 markerEnd={markerId}
                                 opacity="0.85"
                               />
-                              {/* Edge Label Pill */}
-                              <rect
-                                x={mx - 38}
-                                y={my - 9}
-                                width="76"
-                                height="18"
-                                rx="5"
-                                fill="#090d16"
-                                stroke={strokeColor}
-                                strokeWidth="1"
-                                opacity="0.95"
-                              />
-                              <text
-                                x={mx}
-                                y={my + 3.5}
-                                textAnchor="middle"
-                                fill="#cbd5e1"
-                                fontSize="9"
-                                fontWeight="bold"
-                                className="pointer-events-none select-none font-sans"
-                              >
-                                {edge.label?.slice(0, 14)}
-                              </text>
+                              {/* Edge Label Pill with dynamic width */}
+                              {(() => {
+                                const labelText = edge.label || edge.type;
+                                const pillWidth = Math.min(130, Math.max(76, labelText.length * 6.5 + 16));
+                                return (
+                                  <>
+                                    <rect
+                                      x={mx - pillWidth / 2}
+                                      y={my - 10}
+                                      width={pillWidth}
+                                      height="20"
+                                      rx="6"
+                                      fill="#090d16"
+                                      stroke={strokeColor}
+                                      strokeWidth="1.2"
+                                      opacity="0.95"
+                                    />
+                                    <text
+                                      x={mx}
+                                      y={my + 3.5}
+                                      textAnchor="middle"
+                                      fill="#cbd5e1"
+                                      fontSize="9"
+                                      fontWeight="bold"
+                                      className="pointer-events-none select-none font-sans"
+                                    >
+                                      {labelText.length > 18 ? `${labelText.slice(0, 18)}…` : labelText}
+                                    </text>
+                                  </>
+                                );
+                              })()}
                             </g>
                           );
                         })}
@@ -1170,6 +1178,8 @@ export default function App() {
                             : isExpired
                             ? '#f43f5e'
                             : '#10b981';
+
+                          const displayText = node.statement || node.label || node.decision || '';
 
                           return (
                             <g
@@ -1235,7 +1245,7 @@ export default function App() {
                                 fontWeight="600"
                                 className="font-sans"
                               >
-                                {node.statement?.length > 22 ? `${node.statement.slice(0, 22)}...` : node.statement}
+                                {displayText.length > 22 ? `${displayText.slice(0, 22)}...` : displayText}
                               </text>
 
                               {/* Owner */}
@@ -1293,7 +1303,7 @@ export default function App() {
                           </span>
                         </div>
                         <p className="text-slate-100 font-semibold text-xs leading-relaxed">
-                          {selectedGraphNode.statement}
+                          {selectedGraphNode.statement || selectedGraphNode.label || selectedGraphNode.decision}
                         </p>
                         <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
                           <span>Owner: <strong className="text-slate-300">{selectedGraphNode.owner}</strong></span>
@@ -1329,11 +1339,11 @@ export default function App() {
                                     Hop {nbr.depth} • {nbr.direction === 'outgoing' ? '→ Out' : '← In'}
                                   </span>
                                   <span className="text-amber-400 font-medium capitalize">
-                                    {nbr.label || nbr.relation}
+                                    {nbr.label || nbr.relationship || nbr.type}
                                   </span>
                                 </div>
                                 <p className="text-slate-200 text-[11px] font-medium leading-snug">
-                                  {nbr.node?.statement}
+                                  {nbr.node?.statement || nbr.node?.label || nbr.node?.decision}
                                 </p>
                               </div>
                             ))}

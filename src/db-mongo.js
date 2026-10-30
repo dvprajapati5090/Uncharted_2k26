@@ -632,6 +632,8 @@ export async function getMemoryGraph(workspaceId = 'ws_core') {
     nodes.push({
       id: memId,
       label: mem.content?.statement || mem.topic,
+      statement: mem.content?.statement || mem.topic,
+      decision: mem.content?.statement || mem.topic,
       topic: mem.topic,
       status: mem.status,
       type: mem.type,
@@ -762,7 +764,9 @@ export async function traverseGraphRAG(startMemoryId, maxDepth = 2) {
           neighbors.push({
             node: neighborNode,
             relationship: edge.label,
+            label: edge.label,
             type: edge.type,
+            direction: edge.source === id ? 'outgoing' : 'incoming',
             depth: depth + 1
           });
           queue.push({ id: neighborId, depth: depth + 1 });
