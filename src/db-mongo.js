@@ -10,6 +10,7 @@ let isConnected = false;
 const memoryStore = {
   memories: new Map(),
   events: [],
+  feedback: [],
   users: new Map(),
   workspaces: new Map(),
   channels: [
@@ -383,10 +384,145 @@ export async function wipeAllStoredData() {
       await db.collection(config.mongodb.memoriesCollection).deleteMany({});
       await db.collection(config.mongodb.eventsCollection).deleteMany({});
       await db.collection('conversations').deleteMany({});
+      await db.collection('training_feedback').deleteMany({});
     } catch (e) {}
   }
   memoryStore.memories.clear();
   memoryStore.events = [];
+  memoryStore.feedback = [];
   conversationStore.length = 0;
   initDefaultData();
+}
+
+/**
+ * -------------------------------------------------------------
+ * ACTIVE REINFORCEMENT & DPO TRAINING DATASET ENGINE
+ * -------------------------------------------------------------
+ */
+
+export async function recordFeedback(doc) {
+  const item = {
+    _id: doc._id || `fb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    messageId: doc.messageId || null,
+    query: doc.query || '',
+    chosenAnswer: doc.chosenAnswer || '',
+    rejectedAnswer: doc.rejectedAnswer || '',
+    rating: doc.rating === -1 ? -1 : 1, // 1 for positive adherence, -1 for negative
+    reasonTag: doc.reasonTag || (doc.rating === 1 ? 'adhered_to_constraint' : 'hallucination_or_unwanted'),
+    memoryIds: doc.memoryIds || [],
+    workspaceId: doc.workspaceId || 'ws_core',
+    userId: doc.userId || 'u_sarah',
+    timestamp: new Date()
+  };
+
+  // 1. Persist feedback event
+  if (db && isConnected) {
+    try {
+      await db.collection('training_feedback').insertOne(item);
+    } catch (e) {}
+  }
+  memoryStore.feedback.push(item);
+
+  // 2. Calibrate memory confidence dynamically based on reinforcement signal
+  if (item.memoryIds && item.memoryIds.length > 0) {
+    for (const memId of item.memoryIds) {
+      await calibrateMemoryConfidence(memId, item.rating);
+    }
+  }
+
+  return item;
+}
+
+export async function calibrateMemoryConfidence(memoryId, rating) {
+  const mem = await getMemoryById(memoryId);
+  if (!mem) return null;
+
+  let currentConf = typeof mem.confidence === 'number' ? mem.confidence : 0.95;
+  let up = mem.reinforcementUp || 0;
+  let down = mem.reinforcementDown || 0;
+
+  if (rating === 1) {
+    currentConf = Math.min(0.99, parseFloat((currentConf + 0.02).toFixed(4)));
+    up += 1;
+  } else {
+    currentConf = Math.max(0.60, parseFloat((currentConf - 0.06).toFixed(4)));
+    down += 1;
+  }
+
+  const updates = {
+    confidence: currentConf,
+    reinforcementUp: up,
+    reinforcementDown: down,
+    needsVerification: currentConf < 0.75,
+    updatedAt: new Date()
+  };
+
+  await updateMemoryDocument(mem._id, updates);
+  return { id: memoryId, confidence: currentConf, needsVerification: updates.needsVerification };
+}
+
+export async function getFeedbackList(limit = 50) {
+  if (db && isConnected) {
+    try {
+      const items = await db.collection('training_feedback')
+        .find({})
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+      if (items.length > 0) return items;
+    } catch (e) {}
+  }
+  return [...memoryStore.feedback].reverse().slice(0, limit);
+}
+
+export async function getTrainingStats() {
+  const feedback = await getFeedbackList(500);
+  const positive = feedback.filter(f => f.rating === 1).length;
+  const negative = feedback.filter(f => f.rating === -1).length;
+  const total = feedback.length;
+  const adherenceRate = total > 0 ? Math.round((positive / total) * 100) : 100;
+
+  let memories = await findMemories({});
+  const calibratedCount = memories.filter(m => (m.reinforcementUp || 0) > 0 || (m.reinforcementDown || 0) > 0).length;
+
+  return {
+    totalFeedback: total,
+    positiveCount: positive,
+    negativeCount: negative,
+    adherenceRate: adherenceRate,
+    dpoPairsCount: total,
+    calibratedMemoriesCount: calibratedCount
+  };
+}
+
+export async function exportDpoDataset() {
+  const feedback = await getFeedbackList(1000);
+  return feedback.map(f => ({
+    prompt: f.query,
+    chosen: f.rating === 1 ? f.chosenAnswer : f.rejectedAnswer,
+    rejected: f.rating === 1 ? f.rejectedAnswer : f.chosenAnswer,
+    system: "You are SynapseMem 2.0 AI Agent. Strictly adhere to verified persistent team constraints and architectural consensus.",
+    metadata: {
+      feedbackId: f._id,
+      rating: f.rating,
+      reasonTag: f.reasonTag,
+      memoryIds: f.memoryIds,
+      timestamp: f.timestamp
+    }
+  }));
+}
+
+export async function exportVoyagePairs() {
+  const feedback = await getFeedbackList(1000);
+  const pairs = [];
+  for (const f of feedback) {
+    if (f.rating === 1) {
+      pairs.push({
+        query: f.query,
+        positive: f.chosenAnswer,
+        negative: f.rejectedAnswer
+      });
+    }
+  }
+  return pairs;
 }

@@ -21,15 +21,31 @@ import {
   ShieldCheck,
   CheckCircle2,
   Filter,
-  UserCheck
+  UserCheck,
+  GraduationCap,
+  ThumbsUp,
+  ThumbsDown,
+  Download,
+  TrendingUp,
+  Award
 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'ledger'
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'ledger' | 'training'
   const [currentChannel, setCurrentChannel] = useState('architecture');
   const [channels, setChannels] = useState([]);
   const [messages, setMessages] = useState([]);
   const [memories, setMemories] = useState([]);
+  const [trainingStats, setTrainingStats] = useState({
+    totalFeedback: 0,
+    positiveCount: 0,
+    negativeCount: 0,
+    adherenceRate: 100,
+    dpoPairsCount: 0,
+    calibratedMemoriesCount: 0
+  });
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [feedbackMap, setFeedbackMap] = useState({});
   const [inputText, setInputText] = useState('');
   const [activeTeam, setActiveTeam] = useState(null);
   const [activeUser, setActiveUser] = useState(null);
@@ -103,6 +119,7 @@ export default function App() {
       setChannels(chans);
 
       loadMemories();
+      loadTrainingData();
     } catch (err) {
       console.error('Initialization error:', err);
     }
@@ -137,6 +154,65 @@ export default function App() {
       setMemories(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load memories:', err);
+    }
+  };
+
+  const loadTrainingData = async () => {
+    try {
+      const statsRes = await fetch('/api/training/stats');
+      const stats = await statsRes.json();
+      setTrainingStats(stats);
+
+      const listRes = await fetch('/api/training/feedback');
+      const list = await listRes.json();
+      setFeedbackList(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error('Failed to load training stats:', err);
+    }
+  };
+
+  const handleFeedback = async (msg, rating) => {
+    setFeedbackMap(prev => ({ ...prev, [msg.id]: rating }));
+    try {
+      const payload = {
+        messageId: msg.id,
+        query: msg.inspection_data?.query || "Query evaluated",
+        chosenAnswer: msg.text,
+        rejectedAnswer: msg.withoutMemoryAnswer || "Standard generic baseline without stored memory.",
+        rating: rating,
+        reasonTag: rating === 1 ? 'adhered_to_constraint' : 'hallucination_or_unwanted',
+        memoryIds: msg.inspection_data?.promptPayload?.memory_records_injected || [],
+        workspaceId: activeTeam?.id || 'ws_core'
+      };
+
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data?.stats) setTrainingStats(data.stats);
+
+      showToast(
+        rating === 1 
+          ? '👍 Positive Reinforcement: Calibrated memory confidence (+2%)' 
+          : '👎 Negative Feedback: Lowered memory confidence (-6%)',
+        rating === 1 ? 'success' : 'warning'
+      );
+      loadMemories();
+    } catch (err) {
+      showToast('Error recording reinforcement', 'error');
+    }
+  };
+
+  const handleGenerateSynthetic = async () => {
+    try {
+      const res = await fetch('/api/training/generate-synthetic', { method: 'POST' });
+      const data = await res.json();
+      showToast(`⚡ Generated ${data.count} synthetic DPO training pairs from active memories!`, 'success');
+      loadTrainingData();
+    } catch (err) {
+      showToast('Synthetic generation failed', 'error');
     }
   };
 
@@ -330,7 +406,7 @@ export default function App() {
         <nav className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
               activeTab === 'chat' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -338,13 +414,24 @@ export default function App() {
           </button>
           <button
             onClick={() => { setActiveTab('ledger'); loadMemories(); }}
-            className={`px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
               activeTab === 'ledger' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Database className="w-4 h-4 text-indigo-300" /> Memory Ledger
             <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[10px] font-bold text-slate-300">
               {memories.length}
+            </span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('training'); loadTrainingData(); }}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
+              activeTab === 'training' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <GraduationCap className="w-4 h-4 text-indigo-300" /> Training & DPO
+            <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">
+              {trainingStats.dpoPairsCount}
             </span>
           </button>
         </nav>
@@ -542,19 +629,51 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Inspect Button */}
-                      {msg.is_assistant && msg.inspection_data && (
-                        <div className="pl-8 pt-1">
-                          <button
-                            onClick={() => {
-                              setActiveInspection(msg.inspection_data);
-                              setInspectOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700 transition"
-                          >
-                            <ScanEye className="w-3 h-3 text-indigo-400" />
-                            <span>Inspect Retrieval Metrics</span>
-                          </button>
+                      {/* Inspect Button & RLHF Feedback */}
+                      {msg.is_assistant && (
+                        <div className="pl-8 pt-1 flex items-center justify-between flex-wrap gap-2">
+                          {msg.inspection_data && (
+                            <button
+                              onClick={() => {
+                                setActiveInspection(msg.inspection_data);
+                                setInspectOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700 transition"
+                            >
+                              <ScanEye className="w-3 h-3 text-indigo-400" />
+                              <span>Inspect Retrieval Metrics</span>
+                            </button>
+                          )}
+
+                          <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 rounded-lg p-0.5 text-[10px]">
+                            <span className="text-slate-500 font-semibold px-1.5 flex items-center gap-1">
+                              <Award className="w-3 h-3 text-amber-400" /> RLHF:
+                            </span>
+                            <button
+                              onClick={() => handleFeedback(msg, 1)}
+                              className={`px-2 py-0.5 rounded transition flex items-center gap-1 ${
+                                feedbackMap[msg.id] === 1
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold'
+                                  : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+                              }`}
+                              title="Reinforce: Accurately followed stored team constraints"
+                            >
+                              <ThumbsUp className="w-3 h-3" />
+                              <span>{feedbackMap[msg.id] === 1 ? 'Adhered (+2%)' : 'Good'}</span>
+                            </button>
+                            <button
+                              onClick={() => handleFeedback(msg, -1)}
+                              className={`px-2 py-0.5 rounded transition flex items-center gap-1 ${
+                                feedbackMap[msg.id] === -1
+                                  ? 'bg-rose-950 text-rose-300 border border-rose-700 font-bold'
+                                  : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
+                              }`}
+                              title="Penalize: Violated team constraints or hallucinated"
+                            >
+                              <ThumbsDown className="w-3 h-3" />
+                              <span>{feedbackMap[msg.id] === -1 ? 'Violated (-6%)' : 'Bad'}</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -707,7 +826,22 @@ export default function App() {
                         </div>
 
                         <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                          <span>Owner: <strong className="text-slate-300">{mem.owner}</strong></span>
+                          <div className="flex items-center gap-2">
+                            <span>Owner: <strong className="text-slate-300">{mem.owner}</strong></span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono">
+                              {Math.round((mem.confidence || 0.95) * 100)}% conf
+                            </span>
+                            {(mem.reinforcementUp || 0) > 0 && (
+                              <span className="text-[10px] text-emerald-400 flex items-center gap-0.5 font-bold">
+                                <ThumbsUp className="w-2.5 h-2.5" /> +{mem.reinforcementUp}
+                              </span>
+                            )}
+                            {(mem.reinforcementDown || 0) > 0 && (
+                              <span className="text-[10px] text-rose-400 flex items-center gap-0.5 font-bold">
+                                <ThumbsDown className="w-2.5 h-2.5" /> -{mem.reinforcementDown}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center space-x-1">
                             <button
                               onClick={() => openAddModal(mem)}
@@ -729,6 +863,154 @@ export default function App() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 3: ACTIVE REINFORCEMENT & DPO TRAINING DATASET ENGINE */}
+        {activeTab === 'training' && (
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-emerald-400" />
+                  Active Reinforcement & DPO Training Pipeline
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Continuous Memory Calibration: Feedback calibrates authoritative memory weights and exports training pairs for LLM fine-tuning.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGenerateSynthetic}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold text-xs flex items-center gap-1.5 transition shadow"
+                  title="Generate synthetic training pairs from stored memories"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Generate RLHF Sample</span>
+                </button>
+
+                <a
+                  href="/api/training/dpo-dataset.jsonl"
+                  download="synapsemem-dpo-dataset.jsonl"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 transition shadow"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Export DPO (.jsonl)</span>
+                </a>
+
+                <a
+                  href="/api/training/voyage-pairs.jsonl"
+                  download="synapsemem-voyage-pairs.jsonl"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Export Voyage Pairs</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Metrics Row */}
+            <div className="p-4 border-b border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-900/20">
+              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                  <span>Adherence Rate</span>
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="text-xl font-black text-emerald-400">{trainingStats.adherenceRate}%</div>
+                <div className="text-[10px] text-slate-500">Constraint satisfaction ratio</div>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                  <span>DPO Pairs Ready</span>
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <div className="text-xl font-black text-white">{trainingStats.dpoPairsCount}</div>
+                <div className="text-[10px] text-slate-500">Chosen vs. Rejected tuples</div>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                  <span>Calibrated Memories</span>
+                  <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
+                <div className="text-xl font-black text-indigo-300">{trainingStats.calibratedMemoriesCount}</div>
+                <div className="text-[10px] text-slate-500">Weighted by human feedback</div>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                  <span>Target Models</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                </div>
+                <div className="text-sm font-bold text-cyan-300 truncate">Llama-3 • Gemini • Voyage</div>
+                <div className="text-[10px] text-slate-500">Direct fine-tuning format</div>
+              </div>
+            </div>
+
+            {/* Live Dataset Table */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Reinforced Training Dataset (Live Feed)</span>
+                <span className="text-[10px] text-slate-500 font-mono">Format: Direct Preference Optimization (DPO)</span>
+              </div>
+
+              {feedbackList.length === 0 ? (
+                <div className="text-center py-20 text-slate-500 space-y-3">
+                  <GraduationCap className="w-10 h-10 mx-auto text-slate-600" />
+                  <p className="text-xs font-semibold text-slate-300">No reinforcement data recorded yet.</p>
+                  <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                    Click 👍 (Good) or 👎 (Bad) on any assistant answer in Chatbot to record reinforcement, or click "Generate RLHF Sample" above.
+                  </p>
+                </div>
+              ) : (
+                feedbackList.map((item, idx) => (
+                  <div key={item._id || idx} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
+                          item.rating === 1 
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' 
+                            : 'bg-rose-950 text-rose-300 border border-rose-800'
+                        }`}>
+                          {item.rating === 1 ? <ThumbsUp className="w-3 h-3" /> : <ThumbsDown className="w-3 h-3" />}
+                          {item.rating === 1 ? 'Adhered to Memory' : 'Constraint Violated'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Workspace: {item.workspaceId || 'ws_core'}
+                      </span>
+                    </div>
+
+                    <div className="text-xs font-semibold text-slate-200">
+                      <span className="text-indigo-400 font-bold mr-1.5">Prompt:</span>
+                      "{item.query}"
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-900/60 space-y-1">
+                        <div className="text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Chosen (Memory Grounded)
+                        </div>
+                        <p className="text-slate-300 leading-relaxed">{item.chosenAnswer}</p>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-rose-950/20 border border-rose-900/50 space-y-1">
+                        <div className="text-[10px] font-bold text-rose-400 uppercase flex items-center gap-1">
+                          <X className="w-3 h-3" /> Rejected (Baseline Hallucination)
+                        </div>
+                        <p className="text-slate-400 leading-relaxed italic">{item.rejectedAnswer}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
