@@ -1,21 +1,27 @@
 {
-  "name": "team-memory-assistant",
-  "version": "1.0.0",
-  "description": "Memory-powered assistant for team decisions and recall",
-  "main": "src/server.js",
+  "name": "synapsemem",
+  "version": "2.0.0",
+  "description": "The Memory Operating System for AI Agents with MongoDB Atlas Vector Search",
+  "main": "src/server-v2.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "start": "node src/server-v2.js",
+    "dev": "node --watch src/server-v2.js",
+    "test": "node src/test-suite-v2.js",
+    "test:atlas": "node src/atlas-integration-test.js"
   },
   "keywords": [
-    "memory",
-    "assistant",
-    "decision-tracking",
-    "retrieval",
-    "ai",
-    "team-collaboration"
+    "agentic-memory",
+    "mongodb-atlas",
+    "vector-search",
+    "voyage-ai",
+    "ai-agents",
+    "memory-operating-system"
   ],
-  "author": "DeepMind Agent",
-  "license": "MIT"
+  "author": "SynapseMem Core Team",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mongodb": "^6.13.0"
+  }
 }

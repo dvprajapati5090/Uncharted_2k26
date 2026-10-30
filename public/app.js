@@ -113,7 +113,7 @@ function showToast(message, type = 'info') {
   };
 
   toast.className = `toast max-w-sm px-3.5 py-2 rounded-lg border shadow-xl flex items-center space-x-2 text-xs ${colors[type] || colors.info}`;
-  toast.innerHTML = `<span class="font-medium">${message}</span>`;
+  toast.innerHTML = `<span class="font-medium">${escapeHtml(message)}</span>`;
   container.appendChild(toast);
 
   setTimeout(() => {
@@ -813,6 +813,15 @@ function renderMemoriesGrid() {
       </div>`;
     }
 
+    let expiryText = '';
+    if (mem.valid_until) {
+      const expDate = new Date(mem.valid_until);
+      const isPast = new Date() > expDate;
+      expiryText = `<div class="text-[10px] ${isPast ? 'text-rose-400/90' : 'text-indigo-400/90'} font-medium flex items-center gap-1 mt-1">
+        <i data-lucide="clock" class="w-3 h-3"></i> ${isPast ? 'Expired:' : 'Valid until:'} ${expDate.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+      </div>`;
+    }
+
     card.innerHTML = `
       <div>
         <div class="flex items-center justify-between mb-1.5">
@@ -822,6 +831,7 @@ function renderMemoriesGrid() {
         <p class="text-xs font-semibold text-slate-100 mb-1">${escapeHtml(mem.decision)}</p>
         ${mem.reason ? `<div class="text-[11px] text-slate-300 bg-slate-950/80 p-2 rounded-lg border border-slate-800/80"><span class="text-slate-500 font-medium">Why:</span> ${escapeHtml(mem.reason)}</div>` : ''}
         ${lineageText}
+        ${expiryText}
       </div>
       <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
         <span>Owner: <strong>${escapeHtml(mem.owner || 'Team')}</strong></span>
@@ -859,6 +869,7 @@ function openAddMemoryModal() {
   document.getElementById('form-reason').value = '';
   document.getElementById('form-owner').value = currentUser ? currentUser.name : 'Team';
   document.getElementById('form-status').value = 'active';
+  document.getElementById('form-valid-until').value = '';
   memoryModalEl.classList.remove('hidden');
   refreshIcons();
 }
@@ -871,6 +882,8 @@ function openEditMemoryModal(mem) {
   document.getElementById('form-reason').value = mem.reason || '';
   document.getElementById('form-owner').value = mem.owner || 'Team';
   document.getElementById('form-status').value = mem.status || 'active';
+  const validVal = mem.valid_until ? new Date(mem.valid_until).toISOString().slice(0, 16) : '';
+  document.getElementById('form-valid-until').value = validVal;
   memoryModalEl.classList.remove('hidden');
   refreshIcons();
 }
@@ -887,9 +900,11 @@ memoryFormEl.addEventListener('submit', async (e) => {
   const reason = document.getElementById('form-reason').value.trim();
   const owner = document.getElementById('form-owner').value.trim();
   const status = document.getElementById('form-status').value;
+  const validUntilRaw = document.getElementById('form-valid-until').value;
+  const valid_until = validUntilRaw ? new Date(validUntilRaw).toISOString() : null;
   const teamId = currentTeam ? currentTeam.id : 'team_engineering';
 
-  const payload = { topic, decision, reason, owner, status, teamId };
+  const payload = { topic, decision, reason, owner, status, valid_until, teamId };
 
   try {
     if (id) {
@@ -1140,6 +1155,32 @@ function escapeHtml(text) {
 // ----------------------------------------------------
 // 10. Application Boot
 // ----------------------------------------------------
+
+// ----------------------------------------------------
+// 11. Guided 5-Step Demo Orchestrator
+// ----------------------------------------------------
+const btnGuidedDemo = document.getElementById('btn-run-guided-demo');
+if (btnGuidedDemo) {
+  btnGuidedDemo.onclick = async () => {
+    moreOptionsMenu.classList.add('hidden');
+    showToast('🚀 Starting SynapseMem 2.0 Guided Demo...', 'info');
+
+    // Step 1: Wipe & Seed
+    await fetch('/api/demo/seed', { method: 'POST' });
+    showToast('Step 1: Taught Project Atlas stack & Redis restriction', 'success');
+    await loadMessages();
+    await loadMemories();
+
+    // Step 2: Switch to chatbot & ask
+    setTimeout(async () => {
+      switchChannel('ask-assistant');
+      chatInputEl.value = 'Design a background job system for scheduled notifications.';
+      showToast('Step 2: Asking question to demonstrate behavioral adaptation...', 'info');
+      chatFormEl.dispatchEvent(new Event('submit'));
+    }, 1200);
+  };
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
 });
