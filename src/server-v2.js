@@ -18,7 +18,12 @@ import {
   getChannels,
   wipeAllStoredData,
   insertMessage,
-  getMessages
+  getMessages,
+  recordFeedback,
+  getFeedbackList,
+  getTrainingStats,
+  exportDpoDataset,
+  exportVoyagePairs
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -358,6 +363,74 @@ const server = http.createServer(async (req, res) => {
         simulatedTime: newTime.toISOString(),
         message: `System simulated time set to ${newTime.toISOString()}`
       });
+    }
+
+    // ----------------------------------------------------
+    // 6.5. ACTIVE REINFORCEMENT & DPO TRAINING DATASET API
+    // ----------------------------------------------------
+    if (req.method === 'POST' && pathname === '/api/feedback') {
+      const body = await parseBody(req);
+      const feedback = await recordFeedback(body);
+      const stats = await getTrainingStats();
+      return sendJson(res, 201, {
+        success: true,
+        feedback,
+        stats
+      });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/training/stats') {
+      const stats = await getTrainingStats();
+      return sendJson(res, 200, stats);
+    }
+
+    if (req.method === 'GET' && pathname === '/api/training/feedback') {
+      const items = await getFeedbackList();
+      return sendJson(res, 200, items);
+    }
+
+    if (req.method === 'GET' && pathname === '/api/training/dpo-dataset.jsonl') {
+      const dataset = await exportDpoDataset();
+      const jsonl = dataset.map(d => JSON.stringify(d)).join('\n');
+      res.writeHead(200, {
+        'Content-Type': 'application/x-jsonlines; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="synapsemem-dpo-dataset.jsonl"'
+      });
+      return res.end(jsonl);
+    }
+
+    if (req.method === 'GET' && pathname === '/api/training/voyage-pairs.jsonl') {
+      const pairs = await exportVoyagePairs();
+      const jsonl = pairs.map(p => JSON.stringify(p)).join('\n');
+      res.writeHead(200, {
+        'Content-Type': 'application/x-jsonlines; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="synapsemem-voyage-pairs.jsonl"'
+      });
+      return res.end(jsonl);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/training/generate-synthetic') {
+      const memories = await findMemories({ status: 'active' });
+      const created = [];
+      for (const m of memories.slice(0, 3)) {
+        let q = `What is our policy on ${m.topic.toLowerCase()}?`;
+        if (m.topic === 'Infrastructure') q = 'Design a background job system for scheduled notifications.';
+        else if (m.topic === 'Database') q = 'What database are we using for Project Atlas?';
+        else if (m.topic === 'Deployment') q = 'Are there any active deployment freeze rules?';
+
+        const fb = await recordFeedback({
+          query: q,
+          chosenAnswer: `Based on stored memory: "${m.content.statement}".`,
+          rejectedAnswer: `A generic default pattern suggests standard commercial tooling.`,
+          rating: 1,
+          reasonTag: 'adhered_to_constraint',
+          memoryIds: [m._id.toString()],
+          workspaceId: m.workspaceId
+        });
+        created.push(fb);
+      }
+      const stats = await getTrainingStats();
+      return sendJson(res, 201, { status: 'synthetic_pairs_generated', count: created.length, stats });
     }
 
     // ----------------------------------------------------

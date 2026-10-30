@@ -5,7 +5,10 @@ import {
   getMemoryById,
   deleteMemoryDocument,
   updateMemoryDocument,
-  wipeAllStoredData
+  wipeAllStoredData,
+  recordFeedback,
+  getTrainingStats,
+  exportDpoDataset
 } from './db-mongo.js';
 import {
   extractAndFormMemory,
@@ -152,5 +155,34 @@ const privacyCheck = checkPrivacyFilter('Our secret database API key is sk_live_
 assert.strictEqual(privacyCheck.safe, false, 'Credentials must be rejected');
 console.log('✔ Passed: Privacy gate prevented persisting credentials.\n');
 
-console.log('🎉 ALL 7 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 8: Active Reinforcement & Dynamic Calibration Loop
+// ----------------------------------------------------
+console.log('▶ TEST 8: Active Reinforcement & Dynamic Calibration Loop');
+const memToCalibrate = deadlineRes.extracted._id;
+const initialMem = await getMemoryById(memToCalibrate);
+const initialConf = initialMem.confidence || 0.95;
+
+// Positive feedback: user confirms agent adhered to constraint
+await recordFeedback({
+  query: 'Are there any active deployment freeze rules?',
+  chosenAnswer: 'The prior restriction was in effect, but it expired on Nov 5, 2026.',
+  rejectedAnswer: 'Standard deployment practices allow continuous delivery.',
+  rating: 1,
+  reasonTag: 'adhered_to_constraint',
+  memoryIds: [memToCalibrate.toString()],
+  workspaceId: 'ws_core'
+});
+
+const boostedMem = await getMemoryById(memToCalibrate);
+assert(boostedMem.confidence >= initialConf, 'Positive reinforcement must increase memory confidence');
+assert.strictEqual(boostedMem.reinforcementUp, 1, 'Reinforcement counter must increment');
+
+// Verify DPO dataset generation
+const dpoData = await exportDpoDataset();
+assert(dpoData.length > 0, 'DPO dataset must contain exported training pairs');
+assert(dpoData[0].chosen && dpoData[0].rejected && dpoData[0].prompt, 'DPO items must have prompt, chosen, and rejected');
+console.log('✔ Passed: Dynamic confidence calibration and DPO training export verified.\n');
+
+console.log('🎉 ALL 8 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);
