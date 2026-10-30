@@ -34,6 +34,7 @@ import {
 } from './providers/llm-provider.js';
 import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark, BENCHMARK_SCENARIOS } from './benchmark-engine.js';
+import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -382,5 +383,41 @@ console.log(`Naive Flat RAG Score: ${benchmarkRun.scorecard.naiveFlatRag.score}%
 console.log(`History Bloat Agent Score: ${benchmarkRun.scorecard.chatHistoryBloat.score}% (Hallucination: ${benchmarkRun.scorecard.chatHistoryBloat.hallucinationRate})`);
 console.log('✔ Passed: Empirical benchmark engine and multi-architecture scorecard verified.\n');
 
-console.log('🎉 ALL 14 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 15: Semantic Conflict Arbiter & Pre-Commit Shield
+// ----------------------------------------------------
+console.log('▶ TEST 15: Semantic Conflict Arbiter & Pre-Commit Shield');
+
+// 1. Check clean non-conflicting statement
+const cleanCheck = await analyzePreCommitConflict({
+  statement: 'All backend microservices must provide health check endpoints at /healthz.',
+  topic: 'Architecture',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(cleanCheck.hasConflict, false, 'Non-conflicting statement must pass clean');
+
+// 2. Check direct contradiction against approved Redis policy
+const conflictCheck = await analyzePreCommitConflict({
+  statement: 'Do not use Redis or caching systems anywhere in our backend infrastructure.',
+  topic: 'Infrastructure',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(conflictCheck.hasConflict, true, 'Direct polarity clash must be flagged as conflict');
+assert.strictEqual(conflictCheck.highestConflict.severity, 'high');
+assert(conflictCheck.recommendedStrategies.length > 0, 'Must provide resolution strategies');
+console.log(`Pre-Commit Shield: Detected ${conflictCheck.highestConflict.conflictType} against #${conflictCheck.highestConflict.memoryId} (Severity: ${conflictCheck.highestConflict.severity.toUpperCase()})`);
+console.log(`Recommended Strategy: ${conflictCheck.recommendedStrategies[0].label} ("${conflictCheck.recommendedStrategies[0].description}")`);
+
+// 3. Test strategy execution
+const resolveRes = await executeConflictResolution({
+  strategy: 'supersede',
+  candidateMemory: { _id: 'mem_test_cand_01' },
+  conflictingMemoryId: conflictCheck.highestConflict.memoryId,
+  user: { id: 'u_sarah' }
+});
+assert.strictEqual(resolveRes.success, true);
+assert.strictEqual(resolveRes.resolution, 'superseded');
+console.log('✔ Passed: Pre-commit conflict scanning, polarity clash detection, and resolution strategies verified.\n');
+
+console.log('🎉 ALL 15 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

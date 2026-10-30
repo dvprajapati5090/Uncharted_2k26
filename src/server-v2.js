@@ -53,6 +53,7 @@ import {
 } from './consensus-engine-v2.js';
 import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark } from './benchmark-engine.js';
+import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
 
 validateConfig();
 
@@ -665,6 +666,32 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req).catch(() => ({}));
       const results = await runLiveBenchmark(body);
       return sendJson(res, 200, results);
+    }
+
+    // ----------------------------------------------------
+    // 6.13. SEMANTIC CONFLICT ARBITER & PRE-COMMIT SHIELD API
+    // ----------------------------------------------------
+    if (req.method === 'POST' && pathname === '/api/memories/check-conflict') {
+      const body = await parseBody(req);
+      const analysis = await analyzePreCommitConflict({
+        text: body.text || '',
+        statement: body.statement || '',
+        topic: body.topic || '',
+        workspaceId: body.workspaceId || 'ws_core',
+        userId: body.userId || 'u_sarah'
+      });
+      return sendJson(res, 200, analysis);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/memories/resolve-conflict') {
+      const body = await parseBody(req);
+      const resolution = await executeConflictResolution({
+        strategy: body.strategy || 'supersede',
+        candidateMemory: body.candidateMemory || {},
+        conflictingMemoryId: body.conflictingMemoryId,
+        user: { id: body.userId || 'u_sarah' }
+      });
+      return sendJson(res, 200, resolution);
     }
 
     // ----------------------------------------------------
