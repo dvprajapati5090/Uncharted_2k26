@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb';
 import { config } from './config.js';
 import { cosineSimilarity } from './providers/embedding-provider.js';
+import { realtimeSync } from './realtime-sync.js';
 
 let client = null;
 let db = null;
@@ -46,6 +47,7 @@ export async function initMongo() {
     console.log(`[MongoDB] Connected successfully to Atlas database: "${config.mongodb.dbName}"`);
 
     await setupIndexes(db);
+    await realtimeSync.init(db, config.mongodb.memoriesCollection);
     return db;
   } catch (err) {
     console.warn(`[MongoDB] Could not connect to Atlas (${err.message}). Using local document engine.`);
@@ -198,25 +200,53 @@ export async function insertMemoryDocument(doc) {
   if (db && isConnected) {
     const col = db.collection(config.mongodb.memoriesCollection);
     await col.insertOne(doc);
-    return doc;
+  } else {
+    memoryStore.memories.set(doc._id.toString(), doc);
   }
-  memoryStore.memories.set(doc._id.toString(), doc);
+
+  realtimeSync.broadcast({
+    operationType: 'insert',
+    collection: 'memories',
+    documentId: doc._id?.toString(),
+    topic: doc.topic,
+    summary: doc.content?.statement || 'New memory directive formed',
+    status: doc.status || 'active',
+    scope: doc.scope,
+    ownerId: doc.ownerId
+  });
+
   return doc;
 }
 
 export async function updateMemoryDocument(id, updates) {
   const idStr = id.toString();
+  let updated = null;
   if (db && isConnected) {
     const col = db.collection(config.mongodb.memoriesCollection);
     const { ObjectId } = await import('mongodb');
     const query = { _id: ObjectId.isValid(idStr) ? new ObjectId(idStr) : idStr };
     await col.updateOne(query, { $set: updates });
-    return await col.findOne(query);
+    updated = await col.findOne(query);
+  } else {
+    const existing = memoryStore.memories.get(idStr);
+    if (!existing) return null;
+    updated = { ...existing, ...updates };
+    memoryStore.memories.set(idStr, updated);
   }
-  const existing = memoryStore.memories.get(idStr);
-  if (!existing) return null;
-  const updated = { ...existing, ...updates };
-  memoryStore.memories.set(idStr, updated);
+
+  if (updated) {
+    realtimeSync.broadcast({
+      operationType: updates.status === 'superseded' ? 'supersede' : 'update',
+      collection: 'memories',
+      documentId: idStr,
+      topic: updated.topic || 'General',
+      summary: updated.content?.statement || `Memory directive ${idStr} updated`,
+      status: updated.status || 'active',
+      scope: updated.scope,
+      ownerId: updated.ownerId
+    });
+  }
+
   return updated;
 }
 
@@ -255,14 +285,28 @@ export async function findMemories(filter = {}, options = {}) {
 
 export async function deleteMemoryDocument(id) {
   const idStr = id.toString();
+  let deleted = false;
   if (db && isConnected) {
     const col = db.collection(config.mongodb.memoriesCollection);
     const { ObjectId } = await import('mongodb');
     const query = { _id: ObjectId.isValid(idStr) ? new ObjectId(idStr) : idStr };
     const res = await col.deleteOne(query);
-    return res.deletedCount > 0;
+    deleted = res.deletedCount > 0;
+  } else {
+    deleted = memoryStore.memories.delete(idStr);
   }
-  return memoryStore.memories.delete(idStr);
+
+  if (deleted) {
+    realtimeSync.broadcast({
+      operationType: 'delete',
+      collection: 'memories',
+      documentId: idStr,
+      summary: `Memory directive ${idStr} permanently purged`,
+      status: 'purged'
+    });
+  }
+
+  return deleted;
 }
 
 export async function recordMemoryEvent(event) {
@@ -617,6 +661,15 @@ export async function addMemoryRelation(sourceId, targetId, type = 'related_to',
     tRel.push({ targetId: sourceId.toString(), type: reciprocalType, label: `Reciprocal: ${label}` });
     await updateMemoryDocument(targetId, { relations: tRel });
   }
+
+  realtimeSync.broadcast({
+    operationType: 'graph_link',
+    collection: 'memories',
+    documentId: sourceId,
+    topic: source.topic || 'Architecture',
+    summary: `Graph relationship established: [${label || type}] -> #${targetId}`,
+    status: 'active'
+  });
 
   return { sourceId, targetId, type, label };
 }

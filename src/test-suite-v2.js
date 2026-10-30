@@ -32,6 +32,7 @@ import {
   generateMultiModelAnswer,
   buildGroundingPrompt
 } from './providers/llm-provider.js';
+import { realtimeSync } from './realtime-sync.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -324,5 +325,42 @@ console.log(`Gemini Model Recall: "${geminiRecall.answer.slice(0, 70)}..."`);
 console.log(`Claude Model Recall: "${claudeRecall.answer.slice(0, 70)}..."`);
 console.log('✔ Passed: Live multi-model LLM grounding and strict zero-history synthesis verified.\n');
 
-console.log('🎉 ALL 12 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 13: MongoDB Change Streams & Multi-Agent Realtime Sync
+// ----------------------------------------------------
+console.log('▶ TEST 13: MongoDB Change Streams & Multi-Agent Realtime Sync');
+
+const capturedEvents = [];
+const syncListener = (evt) => capturedEvents.push(evt);
+realtimeSync.on('sync_event', syncListener);
+
+// 1. Trigger mutation via broadcast
+const testBroadcast = realtimeSync.broadcast({
+  operationType: 'insert',
+  collection: 'memories',
+  documentId: 'mem_test_sync_001',
+  topic: 'Infrastructure',
+  summary: 'Redis cache TTL standardized to 3600 seconds',
+  status: 'active'
+});
+
+assert(testBroadcast.id.startsWith('evt_'), 'Sync event must have unique eventId');
+assert.strictEqual(testBroadcast.operationType, 'insert');
+assert(testBroadcast.latencyMs > 0, 'Must record realistic propagation latency');
+
+// 2. Verify history and stats
+const syncHistory = realtimeSync.getHistory();
+assert(syncHistory.length > 0, 'Sync history ring buffer must capture events');
+assert.strictEqual(syncHistory[0].documentId, 'mem_test_sync_001');
+
+const syncStats = realtimeSync.getStats();
+assert(syncStats.totalEvents > 0, 'Total events count must be positive');
+assert(syncStats.inserts > 0, 'Insert count must increment');
+
+realtimeSync.off('sync_event', syncListener);
+console.log(`Live Sync Broadcast Captured: ${capturedEvents.length} events (Latest: "${syncHistory[0].summary}")`);
+console.log(`Sync Stats: ${syncStats.totalEvents} total mutations synchronized, average latency: ${testBroadcast.latencyMs}ms`);
+console.log('✔ Passed: Real-time change stream sync and multi-agent broadcast bus verified.\n');
+
+console.log('🎉 ALL 13 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

@@ -51,6 +51,7 @@ import {
   getConsensusStats,
   AGENT_PERSONAS
 } from './consensus-engine-v2.js';
+import { realtimeSync } from './realtime-sync.js';
 
 validateConfig();
 
@@ -623,6 +624,33 @@ const server = http.createServer(async (req, res) => {
         workspaceId: body.workspaceId || 'ws_core'
       });
       return sendJson(res, 201, result);
+    }
+
+    // ----------------------------------------------------
+    // 6.11. REALTIME CHANGE STREAMS & MULTI-AGENT SYNC API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/realtime/stream') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+      });
+      realtimeSync.addClient(res);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/realtime/history') {
+      return sendJson(res, 200, {
+        history: realtimeSync.getHistory(),
+        stats: realtimeSync.getStats()
+      });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/realtime/broadcast') {
+      const body = await parseBody(req);
+      const event = realtimeSync.broadcast(body);
+      return sendJson(res, 201, { success: true, event });
     }
 
     // ----------------------------------------------------
