@@ -170,7 +170,9 @@ const server = http.createServer(async (req, res) => {
       }
 
       const isAssistantChannel = channel === 'ask-assistant';
-      const isQuery = isAssistantChannel || /^\?|@assistant|\bwhat\b|\bwhen\b|\bwhy\b|\bcan we\b|\bdesign\b/i.test(text);
+      const isQuery = isAssistantChannel || 
+        text.trim().endsWith('?') || 
+        /^\?|@assistant|\bwhat\b|\bwhen\b|\bwhy\b|\bwhere\b|\bwho\b|\bhow\b|\bcan we\b|\bcan i\b|\bare there\b|\bis there\b|\bshould we\b|\bdesign\b/i.test(text);
 
       let extractedResult = { extracted: null, superseded: null };
       if (!isQuery) {
