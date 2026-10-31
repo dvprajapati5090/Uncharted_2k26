@@ -170,7 +170,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/auth/register') {
       try {
         const body = await parseBody(req);
-        const result = registerUser(body);
+        const result = await registerUser(body);
         return sendJson(res, 201, { success: true, ...result });
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
@@ -180,7 +180,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/auth/login') {
       try {
         const body = await parseBody(req);
-        const result = loginUser(body);
+        const result = await loginUser(body);
         return sendJson(res, 200, { success: true, ...result });
       } catch (err) {
         return sendJson(res, 401, { error: err.message });
@@ -190,7 +190,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && pathname === '/api/auth/me') {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.replace(/^Bearer\s+/i, '') || req.headers['x-auth-token'];
-      const data = getUserByToken(token);
+      const data = await getUserByToken(token);
       if (!data) {
         return sendJson(res, 401, { error: 'Not authenticated' });
       }
@@ -200,21 +200,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/auth/logout') {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.replace(/^Bearer\s+/i, '') || req.headers['x-auth-token'];
-      logoutUser(token);
+      await logoutUser(token);
       return sendJson(res, 200, { success: true });
     }
 
     // 1. WORKSPACES (TEAMS) & USERS
     // ----------------------------------------------------
     if (req.method === 'GET' && pathname === '/api/teams') {
-      const authWs = getAllAuthWorkspaces();
+      const authWs = await getAllAuthWorkspaces();
       const workspaces = authWs.length > 0 ? authWs : getAllWorkspaces();
       return sendJson(res, 200, workspaces);
     }
 
     if (req.method === 'GET' && pathname.startsWith('/api/teams/') && pathname.endsWith('/users')) {
       const teamId = pathname.split('/')[3];
-      const authUsers = getUsersByWorkspace(teamId);
+      const authUsers = await getUsersByWorkspace(teamId);
       const users = authUsers.length > 0 ? authUsers : getAllUsers();
       return sendJson(res, 200, users);
     }

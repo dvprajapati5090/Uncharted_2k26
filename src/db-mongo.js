@@ -143,8 +143,8 @@ export async function setupIndexes(database) {
 }
 
 function initDefaultData() {
-  if (memoryStore.users.size === 0) {
-    const now = new Date().toISOString();
+  const now = new Date().toISOString();
+  if (memoryStore.workspaces.size === 0) {
     const defaultUsers = [
       { id: 'u_sarah', name: 'Sarah Jenkins', role: 'Tech Lead', workspaceId: 'ws_core', avatar: 'SJ' },
       { id: 'u_alex', name: 'Alex Rivera', role: 'Backend Lead', workspaceId: 'ws_core', avatar: 'AR' },
@@ -153,7 +153,7 @@ function initDefaultData() {
       { id: 'u_cand_a', name: 'Candidate A', role: 'Sprint Developer', workspaceId: 'ws_core', avatar: 'CA' },
       { id: 'u_cand_b', name: 'Candidate B', role: 'Backend Engineer', workspaceId: 'ws_core', avatar: 'CB' }
     ];
-    defaultUsers.forEach(u => memoryStore.users.set(u.id, u));
+    // Clean slate: users register their own real accounts
 
     memoryStore.workspaces.set('ws_core', {
       id: 'ws_core',

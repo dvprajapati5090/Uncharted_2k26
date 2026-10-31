@@ -15,8 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Zap,
-  Clock,
-  Database
+  Clock
 } from 'lucide-react';
 
 export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
@@ -72,34 +71,6 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
     }
   };
 
-  const handleQuickDemoLogin = async (demoEmail, demoPassword) => {
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: demoEmail, password: demoPassword })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Quick login failed.');
-
-      if (data.token) {
-        try {
-          localStorage.setItem('synapse_auth_token', data.token);
-          localStorage.setItem('synapse_active_team_id', data.team?.id);
-          localStorage.setItem('synapse_active_user_id', data.user?.id);
-        } catch (_) {}
-      }
-
-      onLoginSuccess(data.team, data.user);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen w-full bg-black text-white flex flex-col lg:flex-row relative overflow-x-hidden font-sans select-none selection:bg-white selection:text-black">
       {/* Background radial gradients */}
@@ -126,7 +97,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
 
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-neutral-300">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Atlas Engine Online</span>
+              <span>Atlas MongoDB Engine</span>
             </div>
           </div>
 
@@ -178,7 +149,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1">
-              <span>Owner: Sarah Jenkins (Tech Lead)</span>
+              <span>Owner: Your Team Lead</span>
               <span className="text-emerald-400 font-mono">100% Grounded • 0% Chat Bloat</span>
             </div>
           </div>
@@ -202,7 +173,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
               <span>Candidate Token Guard</span>
             </div>
             <p className="text-[11px] text-neutral-400">
-              Collision radar intercepts duplicate prompts across candidates, saving thousands of tokens.
+              Collision radar intercepts duplicate prompts across teammates, saving thousands of tokens.
             </p>
           </div>
         </div>
@@ -210,7 +181,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
         {/* Footer Note */}
         <div className="mt-8 pt-6 border-t border-white/10 text-[11px] text-neutral-500 flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-neutral-400" />
-          <span>Multi-tenant workspace isolation &bull; Cryptographically salted session tokens</span>
+          <span>Multi-tenant MongoDB Atlas isolation &bull; Cryptographically salted authentication</span>
         </div>
       </div>
 
@@ -268,7 +239,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
               </h2>
               <p className="text-xs text-neutral-400 leading-relaxed">
                 {isRegister
-                  ? 'Set up your developer profile and collaborative team workspace.'
+                  ? 'Set up your developer profile and collaborative team workspace in MongoDB.'
                   : 'Enter your email and password to access your team decisions.'}
               </p>
             </div>
@@ -300,7 +271,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. Bhavya Sharma"
+                        placeholder="e.g. John Doe or Jane Smith"
                         className="w-full bg-black/60 border border-white/20 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition"
                       />
                     </div>
@@ -320,7 +291,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                         required
                         value={teamName}
                         onChange={(e) => setTeamName(e.target.value)}
-                        placeholder="e.g. Apollo Core Engineering, Alpha Sprint"
+                        placeholder="e.g. Acme Corp, Alpha Engineering"
                         className="w-full bg-black/60 border border-white/20 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition"
                       />
                     </div>
@@ -376,7 +347,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                   {!isRegister && (
                     <button
                       type="button"
-                      onClick={() => alert('Password reset is sent via your team workspace administrator.')}
+                      onClick={() => alert('Password reset link is sent to your registered email.')}
                       className="text-[11px] text-neutral-400 hover:text-white transition"
                     >
                       Forgot password?
@@ -412,7 +383,7 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                 className="w-full py-3 px-4 rounded-xl font-semibold text-xs text-black bg-white hover:bg-neutral-200 transition duration-200 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer mt-2"
               >
                 {loading ? (
-                  <span>Authenticating...</span>
+                  <span>Authenticating with MongoDB...</span>
                 ) : (
                   <>
                     <span>{isRegister ? 'Create Team & Enter Workspace' : 'Sign In to Workspace'}</span>
@@ -422,49 +393,11 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
               </button>
             </form>
 
-            {/* Quick Demo Accounts Helper */}
-            {!isRegister && (
-              <div className="pt-4 border-t border-white/10 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-neutral-400">
-                  <span>Instant Test Sign-In:</span>
-                  <span className="text-[10px] text-neutral-500 font-mono">pass: password123</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('cand.a@demo.com', 'password123')}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[11px] font-medium transition text-center truncate cursor-pointer"
-                    title="Sign in as Candidate A (Sprint Dev)"
-                  >
-                    Candidate A
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('cand.b@demo.com', 'password123')}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[11px] font-medium transition text-center truncate cursor-pointer"
-                    title="Sign in as Candidate B (Token Guard Test)"
-                  >
-                    Candidate B
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('lead@demo.com', 'password123')}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[11px] font-medium transition text-center truncate cursor-pointer"
-                    title="Sign in as Sarah Jenkins (Tech Lead)"
-                  >
-                    Tech Lead
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Footer Mode Switcher */}
-            <div className="text-center text-xs text-neutral-400 pt-2">
+            <div className="text-center text-xs text-neutral-400 pt-2 border-t border-white/10">
               {isRegister ? (
                 <span>
-                  Already have a team account?{' '}
+                  Already have an account?{' '}
                   <button
                     type="button"
                     onClick={() => {
