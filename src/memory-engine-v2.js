@@ -320,15 +320,20 @@ export async function handleSuperseding(newMemory) {
 }
 
 /**
- * Logical expiry refresh: checks validUntil against current app time
+ * Logical expiry refresh: checks validUntil against current app time bidirectionally
  */
 export async function refreshExpirations() {
   const now = getAppNow();
-  const memories = await findMemories({ status: 'active' });
+  const memories = await findMemories({});
   let count = 0;
 
   for (const mem of memories) {
-    if (mem.validUntil && new Date(mem.validUntil) < now) {
+    if (!mem.validUntil) continue;
+    // Superseded directives remain superseded across time
+    if (mem.status === 'superseded') continue;
+
+    const expiryDate = new Date(mem.validUntil);
+    if (expiryDate <= now && mem.status !== 'expired') {
       await updateMemoryDocument(mem._id, {
         status: 'expired',
         updatedAt: now
@@ -336,6 +341,19 @@ export async function refreshExpirations() {
       await recordMemoryEvent({
         eventId: `evt_exp_${Date.now()}_${count}`,
         type: 'MEMORY_EXPIRED',
+        memoryId: mem._id.toString(),
+        timestamp: now
+      });
+      count++;
+    } else if (expiryDate > now && mem.status === 'expired') {
+      // Bidirectional time travel: if simulated time moved back before the expiry date, reactivate!
+      await updateMemoryDocument(mem._id, {
+        status: 'active',
+        updatedAt: now
+      });
+      await recordMemoryEvent({
+        eventId: `evt_react_${Date.now()}_${count}`,
+        type: 'MEMORY_REACTIVATED',
         memoryId: mem._id.toString(),
         timestamp: now
       });
