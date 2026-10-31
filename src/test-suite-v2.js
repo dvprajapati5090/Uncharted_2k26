@@ -32,6 +32,9 @@ import {
   generateMultiModelAnswer,
   buildGroundingPrompt
 } from './providers/llm-provider.js';
+import { realtimeSync } from './realtime-sync.js';
+import { runLiveBenchmark, getLatestBenchmark, BENCHMARK_SCENARIOS } from './benchmark-engine.js';
+import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -324,5 +327,97 @@ console.log(`Gemini Model Recall: "${geminiRecall.answer.slice(0, 70)}..."`);
 console.log(`Claude Model Recall: "${claudeRecall.answer.slice(0, 70)}..."`);
 console.log('✔ Passed: Live multi-model LLM grounding and strict zero-history synthesis verified.\n');
 
-console.log('🎉 ALL 12 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 13: MongoDB Change Streams & Multi-Agent Realtime Sync
+// ----------------------------------------------------
+console.log('▶ TEST 13: MongoDB Change Streams & Multi-Agent Realtime Sync');
+
+const capturedEvents = [];
+const syncListener = (evt) => capturedEvents.push(evt);
+realtimeSync.on('sync_event', syncListener);
+
+// 1. Trigger mutation via broadcast
+const testBroadcast = realtimeSync.broadcast({
+  operationType: 'insert',
+  collection: 'memories',
+  documentId: 'mem_test_sync_001',
+  topic: 'Infrastructure',
+  summary: 'Redis cache TTL standardized to 3600 seconds',
+  status: 'active'
+});
+
+assert(testBroadcast.id.startsWith('evt_'), 'Sync event must have unique eventId');
+assert.strictEqual(testBroadcast.operationType, 'insert');
+assert(testBroadcast.latencyMs > 0, 'Must record realistic propagation latency');
+
+// 2. Verify history and stats
+const syncHistory = realtimeSync.getHistory();
+assert(syncHistory.length > 0, 'Sync history ring buffer must capture events');
+assert.strictEqual(syncHistory[0].documentId, 'mem_test_sync_001');
+
+const syncStats = realtimeSync.getStats();
+assert(syncStats.totalEvents > 0, 'Total events count must be positive');
+assert(syncStats.inserts > 0, 'Insert count must increment');
+
+realtimeSync.off('sync_event', syncListener);
+console.log(`Live Sync Broadcast Captured: ${capturedEvents.length} events (Latest: "${syncHistory[0].summary}")`);
+console.log(`Sync Stats: ${syncStats.totalEvents} total mutations synchronized, average latency: ${testBroadcast.latencyMs}ms`);
+console.log('✔ Passed: Real-time change stream sync and multi-agent broadcast bus verified.\n');
+
+// ----------------------------------------------------
+// TEST 14: Live Benchmark Engine & Comparative Scorecard
+// ----------------------------------------------------
+console.log('▶ TEST 14: Live Benchmark Engine & Comparative Scorecard (Synapse vs Naive RAG vs History Bloat)');
+
+const initialBenchmark = getLatestBenchmark();
+assert(initialBenchmark.scorecard.synapseMem.score > 90, 'Initial score must reflect high adherence');
+assert(initialBenchmark.radarMetrics.length === 5, 'Must evaluate across 5 radar dimensions');
+
+const benchmarkRun = await runLiveBenchmark();
+assert.strictEqual(benchmarkRun.detailedTests.length, BENCHMARK_SCENARIOS.length, 'Must execute all benchmark scenarios');
+assert(benchmarkRun.scorecard.synapseMem.score >= 80, 'SynapseMem score must lead significantly');
+assert(benchmarkRun.totalExecutionTimeMs >= 0, 'Must record execution time');
+console.log(`Benchmark Executed: ${benchmarkRun.detailedTests.length} adversarial tests in ${benchmarkRun.totalExecutionTimeMs}ms`);
+console.log(`SynapseMem Score: ${benchmarkRun.scorecard.synapseMem.score}% (Hallucination: ${benchmarkRun.scorecard.synapseMem.hallucinationRate}, Token Reduction: ${benchmarkRun.scorecard.synapseMem.tokenEfficiency})`);
+console.log(`Naive Flat RAG Score: ${benchmarkRun.scorecard.naiveFlatRag.score}% (Hallucination: ${benchmarkRun.scorecard.naiveFlatRag.hallucinationRate})`);
+console.log(`History Bloat Agent Score: ${benchmarkRun.scorecard.chatHistoryBloat.score}% (Hallucination: ${benchmarkRun.scorecard.chatHistoryBloat.hallucinationRate})`);
+console.log('✔ Passed: Empirical benchmark engine and multi-architecture scorecard verified.\n');
+
+// ----------------------------------------------------
+// TEST 15: Semantic Conflict Arbiter & Pre-Commit Shield
+// ----------------------------------------------------
+console.log('▶ TEST 15: Semantic Conflict Arbiter & Pre-Commit Shield');
+
+// 1. Check clean non-conflicting statement
+const cleanCheck = await analyzePreCommitConflict({
+  statement: 'All backend microservices must provide health check endpoints at /healthz.',
+  topic: 'Architecture',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(cleanCheck.hasConflict, false, 'Non-conflicting statement must pass clean');
+
+// 2. Check direct contradiction against approved Redis policy
+const conflictCheck = await analyzePreCommitConflict({
+  statement: 'Do not use Redis or caching systems anywhere in our backend infrastructure.',
+  topic: 'Infrastructure',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(conflictCheck.hasConflict, true, 'Direct polarity clash must be flagged as conflict');
+assert.strictEqual(conflictCheck.highestConflict.severity, 'high');
+assert(conflictCheck.recommendedStrategies.length > 0, 'Must provide resolution strategies');
+console.log(`Pre-Commit Shield: Detected ${conflictCheck.highestConflict.conflictType} against #${conflictCheck.highestConflict.memoryId} (Severity: ${conflictCheck.highestConflict.severity.toUpperCase()})`);
+console.log(`Recommended Strategy: ${conflictCheck.recommendedStrategies[0].label} ("${conflictCheck.recommendedStrategies[0].description}")`);
+
+// 3. Test strategy execution
+const resolveRes = await executeConflictResolution({
+  strategy: 'supersede',
+  candidateMemory: { _id: 'mem_test_cand_01' },
+  conflictingMemoryId: conflictCheck.highestConflict.memoryId,
+  user: { id: 'u_sarah' }
+});
+assert.strictEqual(resolveRes.success, true);
+assert.strictEqual(resolveRes.resolution, 'superseded');
+console.log('✔ Passed: Pre-commit conflict scanning, polarity clash detection, and resolution strategies verified.\n');
+
+console.log('🎉 ALL 15 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

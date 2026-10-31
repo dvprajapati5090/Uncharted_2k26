@@ -1,5 +1,6 @@
 import { findMemories, updateMemoryDocument, getDb, isMongoConnected } from './db-mongo.js';
 import { getAppNow, checkPrivacyFilter } from './memory-engine-v2.js';
+import { realtimeSync } from './realtime-sync.js';
 
 export const AGENT_PERSONAS = [
   {
@@ -219,6 +220,17 @@ export async function evaluateMemoryConsensus(memoryDoc, options = {}) {
       console.warn('[MongoDB] Proposal persistence notice:', e.message);
     }
   }
+
+  realtimeSync.broadcast({
+    operationType: 'consensus',
+    collection: 'consensus_proposals',
+    documentId: proposal.id,
+    topic: proposal.topic,
+    summary: `Quorum Consensus ${status.toUpperCase()} (${Math.round(approvalRate * 100)}%): "${proposal.statement.slice(0, 60)}"`,
+    status,
+    scope: memoryDoc.scope || 'workspace',
+    ownerId: memoryDoc.ownerId || 'system'
+  });
 
   // 4. Update memory document with consensus ratification status if persisted
   if (memoryDoc._id) {
