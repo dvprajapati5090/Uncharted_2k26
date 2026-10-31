@@ -990,6 +990,18 @@ async function start() {
     console.warn('[Startup] Memory auto-seed check note:', err.message);
   }
 
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ [SynapseMem] Port ${PORT} is already in use by another process.`);
+      console.error(`   To free port ${PORT}, terminate the running process or start on an alternate port:`);
+      console.error(`   e.g. $env:PORT=3001; npm run dev\n`);
+      process.exit(1);
+    } else {
+      console.error('[SynapseMem] Server startup error:', err);
+      process.exit(1);
+    }
+  });
+
   server.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🧠 SynapseMem 2.0 (MongoDB Atlas Engine) on http://localhost:${PORT}`);
