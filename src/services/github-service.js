@@ -484,32 +484,32 @@ export async function installGuardianPullRequest({
     });
 
     // 4. Commit .github/workflows/synapse-pr-linter.yml
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: '.github/workflows/synapse-pr-linter.yml',
       message: 'feat(ci): install SynapseMem 2.0 architectural PR compliance linter workflow',
-      content: Buffer.from(workflowContent).toString('base64'),
+      content: workflowContent,
       branch: targetBranch
     });
 
     // 5. Commit scripts/pr-linter.mjs (Universal ESM)
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: 'scripts/pr-linter.mjs',
       message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine (.mjs)',
-      content: Buffer.from(linterContent).toString('base64'),
+      content: linterContent,
       branch: targetBranch
     });
 
     // 5b. Commit scripts/pr-linter.js (Dual compatibility wrapper)
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: 'scripts/pr-linter.js',
       message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine (.js)',
-      content: Buffer.from(linterContent).toString('base64'),
+      content: linterContent,
       branch: targetBranch
     });
 
@@ -641,12 +641,12 @@ ${memory.content?.reason || memory.reason || 'Team consensus established in Syna
       sha: refData.data.object.sha
     });
 
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: adrFileName,
       message: `docs(adr): record ADR-00${adrIndex} for ${memory.topic} decision`,
-      content: Buffer.from(adrMarkdown).toString('base64'),
+      content: adrMarkdown,
       branch: targetBranch
     });
 
