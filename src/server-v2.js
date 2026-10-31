@@ -43,7 +43,8 @@ import {
   AVAILABLE_MODELS,
   setRuntimeKey,
   getRuntimeKey,
-  generateMultiModelAnswer
+  generateMultiModelAnswer,
+  testLlmConnection
 } from './providers/llm-provider.js';
 import {
   evaluateMemoryConsensus,
@@ -297,7 +298,13 @@ const server = http.createServer(async (req, res) => {
       const user = { id: body.userId || 'u_sarah' };
       const workspaceId = body.workspaceId || 'ws_core';
       const model = body.model || 'gemini-2.5-flash';
-      const apiKey = body.apiKey || '';
+      const apiKey = (body.apiKey || '').trim();
+
+      // If client supplied an active API key in chat request, persist to runtime store
+      if (apiKey) {
+        const provider = model.includes('claude') ? 'claude' : 'gemini';
+        setRuntimeKey(provider, apiKey);
+      }
 
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -365,6 +372,24 @@ const server = http.createServer(async (req, res) => {
           hasClaudeKey: !!getRuntimeKey('claude')
         }
       });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/llm/test') {
+      const body = await parseBody(req);
+      const provider = body.provider || 'gemini';
+      const key = (body.key || getRuntimeKey(provider) || '').trim();
+
+      if (!key) {
+        return sendJson(res, 400, { success: false, error: `No API key provided for ${provider}. Please enter a key.` });
+      }
+
+      try {
+        const testRes = await testLlmConnection({ provider, apiKey: key });
+        setRuntimeKey(provider, key);
+        return sendJson(res, 200, testRes);
+      } catch (err) {
+        return sendJson(res, 400, { success: false, error: err.message });
+      }
     }
 
     // ----------------------------------------------------

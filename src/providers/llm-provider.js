@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { config } from '../config.js';
 
 export const AVAILABLE_MODELS = [
@@ -38,15 +40,46 @@ export const AVAILABLE_MODELS = [
   }
 ];
 
-// Active runtime keys (can be set via UI or .env)
+// Persistent runtime keys storage path
+const KEYS_FILE = path.resolve(process.cwd(), '.runtime_keys.json');
+
+function loadPersistedKeys() {
+  try {
+    if (fs.existsSync(KEYS_FILE)) {
+      const raw = fs.readFileSync(KEYS_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      return {
+        gemini: (data.gemini || '').trim(),
+        claude: (data.claude || '').trim()
+      };
+    }
+  } catch (err) {
+    console.warn('[LLMProvider] Note reading persisted keys:', err.message);
+  }
+  return { gemini: '', claude: '' };
+}
+
+function savePersistedKeys(keys) {
+  try {
+    fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[LLMProvider] Note saving persisted keys:', err.message);
+  }
+}
+
+const persistedKeys = loadPersistedKeys();
+
+// Active runtime keys (combines process.env, persisted file, and runtime updates)
 const runtimeKeys = {
-  gemini: process.env.GEMINI_API_KEY || process.env.LLM_API_KEY || '',
-  claude: process.env.ANTHROPIC_API_KEY || ''
+  gemini: (process.env.GEMINI_API_KEY || process.env.LLM_API_KEY || persistedKeys.gemini || '').trim(),
+  claude: (process.env.ANTHROPIC_API_KEY || persistedKeys.claude || '').trim()
 };
 
 export function setRuntimeKey(provider, key) {
-  if (provider === 'gemini') runtimeKeys.gemini = key.trim();
-  if (provider === 'claude') runtimeKeys.claude = key.trim();
+  const cleanKey = (key || '').trim();
+  if (provider === 'gemini') runtimeKeys.gemini = cleanKey;
+  if (provider === 'claude') runtimeKeys.claude = cleanKey;
+  savePersistedKeys(runtimeKeys);
 }
 
 export function getRuntimeKey(provider) {
@@ -91,56 +124,83 @@ export function buildGroundingPrompt({
 }
 
 /**
- * Generates an answer using Google Gemini REST API
+ * Generates an answer using Google Gemini REST API with multi-model fallback resiliency
  */
 export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash', apiKey = '' }) {
-  const effectiveKey = apiKey || runtimeKeys.gemini;
+  const effectiveKey = (apiKey || runtimeKeys.gemini || '').trim();
   if (!effectiveKey) {
-    throw new Error('No Google Gemini API key configured. Please supply GEMINI_API_KEY.');
+    throw new Error('No Google Gemini API key configured. Please enter your GEMINI_API_KEY in LLM Settings.');
   }
 
   const modelMap = {
-    'gemini-2.5-flash': 'gemini-1.5-flash', // Maps to standard production Flash model on Google Cloud
-    'gemini-1.5-flash': 'gemini-1.5-flash',
-    'gemini-1.5-pro': 'gemini-1.5-pro',
-    'gemini-2.0-flash': 'gemini-2.0-flash-exp'
+    'gemini-2.5-flash': ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'],
+    'gemini-1.5-flash': ['gemini-1.5-flash', 'gemini-1.5-flash-latest'],
+    'gemini-1.5-pro': ['gemini-1.5-pro', 'gemini-1.5-pro-latest'],
+    'gemini-2.0-flash': ['gemini-2.0-flash', 'gemini-1.5-flash']
   };
 
-  const targetModel = modelMap[model] || 'gemini-1.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${effectiveKey}`;
+  const candidateModels = modelMap[model] || ['gemini-1.5-flash'];
+  let lastError = null;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 800
+  for (const targetModel of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${encodeURIComponent(effectiveKey)}`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': effectiveKey
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 800
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        let parsedMessage = errText;
+        try {
+          const errObj = JSON.parse(errText);
+          parsedMessage = errObj.error?.message || errText;
+        } catch (_) {}
+
+        if (res.status === 404 && candidateModels.indexOf(targetModel) < candidateModels.length - 1) {
+          console.warn(`[GeminiProvider] Model ${targetModel} returned 404, attempting next fallback candidate...`);
+          continue;
+        }
+        throw new Error(`Google Gemini Cloud API (${res.status}): ${parsedMessage}`);
       }
-    })
-  });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        throw new Error('Google Gemini API returned empty candidate response.');
+      }
+      return text.trim();
+    } catch (err) {
+      lastError = err;
+      if (err.message.includes('404') && candidateModels.indexOf(targetModel) < candidateModels.length - 1) {
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error('Gemini API returned empty candidate response.');
-  }
-  return text.trim();
+  throw lastError || new Error('Google Gemini API invocation failed.');
 }
 
 /**
  * Generates an answer using Anthropic Claude REST API
  */
 export async function generateClaudeContent({ prompt, model = 'claude-3-5-sonnet', apiKey = '' }) {
-  const effectiveKey = apiKey || runtimeKeys.claude;
+  const effectiveKey = (apiKey || runtimeKeys.claude || '').trim();
   if (!effectiveKey) {
-    throw new Error('No Anthropic Claude API key configured. Please supply ANTHROPIC_API_KEY.');
+    throw new Error('No Anthropic Claude API key configured. Please supply ANTHROPIC_API_KEY in LLM Settings.');
   }
 
   const modelMap = {
@@ -168,15 +228,58 @@ export async function generateClaudeContent({ prompt, model = 'claude-3-5-sonnet
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Claude API error (${res.status}): ${errText}`);
+    let parsedMessage = errText;
+    try {
+      const errObj = JSON.parse(errText);
+      parsedMessage = errObj.error?.message || errText;
+    } catch (_) {}
+    throw new Error(`Anthropic Claude API (${res.status}): ${parsedMessage}`);
   }
 
   const data = await res.json();
   const text = data.content?.[0]?.text;
   if (!text) {
-    throw new Error('Claude API returned empty response content.');
+    throw new Error('Anthropic Claude API returned empty response content.');
   }
   return text.trim();
+}
+
+/**
+ * Tests connection to a live cloud provider
+ */
+export async function testLlmConnection({ provider = 'gemini', apiKey = '' }) {
+  const cleanKey = (apiKey || runtimeKeys[provider] || '').trim();
+  if (!cleanKey) {
+    throw new Error(`No API key provided for ${provider}. Please enter a valid key.`);
+  }
+
+  if (provider === 'gemini') {
+    const text = await generateGeminiContent({
+      prompt: 'Respond with exactly: "SynapseMem Live Connection Verified"',
+      model: 'gemini-1.5-flash',
+      apiKey: cleanKey
+    });
+    return {
+      success: true,
+      provider: 'Google Gemini',
+      modelUsed: 'gemini-1.5-flash',
+      response: text
+    };
+  } else if (provider === 'claude') {
+    const text = await generateClaudeContent({
+      prompt: 'Respond with exactly: "SynapseMem Live Connection Verified"',
+      model: 'claude-3-5-sonnet',
+      apiKey: cleanKey
+    });
+    return {
+      success: true,
+      provider: 'Anthropic Claude',
+      modelUsed: 'claude-3-5-sonnet',
+      response: text
+    };
+  } else {
+    throw new Error(`Unsupported provider: ${provider}`);
+  }
 }
 
 /**
@@ -278,32 +381,36 @@ export async function generateMultiModelAnswer({
 
   // Try live provider if configured
   if (modelMeta.provider === 'gemini') {
-    const key = apiKey || runtimeKeys.gemini;
+    const key = (apiKey || runtimeKeys.gemini || '').trim();
     if (key) {
       try {
+        console.log(`[GeminiProvider] Calling live Google Gemini API using model ${modelMeta.id}...`);
         answer = await generateGeminiContent({ prompt, model: modelMeta.id, apiKey: key });
         isLive = true;
         providerUsed = `Google Gemini (${modelMeta.name} Cloud API)`;
+        console.log(`[GeminiProvider] Live call SUCCESSFUL! Generated ${answer.length} chars.`);
       } catch (err) {
         liveError = err.message;
         console.warn(`[GeminiProvider] Live call note: ${err.message}. Falling back to local grounded engine.`);
       }
     } else {
-      liveError = 'No Gemini API Key supplied. Using local Atlas vector grounding engine.';
+      liveError = 'No Gemini API Key supplied. Falling back to local Atlas vector grounding engine.';
     }
   } else if (modelMeta.provider === 'claude') {
-    const key = apiKey || runtimeKeys.claude;
+    const key = (apiKey || runtimeKeys.claude || '').trim();
     if (key) {
       try {
+        console.log(`[ClaudeProvider] Calling live Anthropic Claude API using model ${modelMeta.id}...`);
         answer = await generateClaudeContent({ prompt, model: modelMeta.id, apiKey: key });
         isLive = true;
         providerUsed = `Anthropic Claude (${modelMeta.name} Cloud API)`;
+        console.log(`[ClaudeProvider] Live call SUCCESSFUL! Generated ${answer.length} chars.`);
       } catch (err) {
         liveError = err.message;
         console.warn(`[ClaudeProvider] Live call note: ${err.message}. Falling back to local grounded engine.`);
       }
     } else {
-      liveError = 'No Claude API Key supplied. Using local Atlas vector grounding engine.';
+      liveError = 'No Claude API Key supplied. Falling back to local Atlas vector grounding engine.';
     }
   }
 
