@@ -83,23 +83,26 @@ export default function AppSidebar({
         {/* Top: Header & Primary Navigation */}
         <div className="flex flex-col overflow-y-auto no-scrollbar flex-1">
           {/* Workspace Switcher Header */}
-          <div className="h-14 px-3 border-b border-white/10 flex items-center justify-between bg-black/60 shrink-0">
+          <div className="h-12 px-3 border-b border-white/[0.07] flex items-center justify-between bg-black/40 shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">
               <div
                 onClick={() => setSidebarPinned(!sidebarPinned)}
-                className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white text-xs font-bold shrink-0 cursor-pointer hover:border-white/40 transition"
+                className="w-7 h-7 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center text-white shrink-0 cursor-pointer hover:border-white/35 transition"
                 title={sidebarPinned ? 'Sidebar Locked (Click to unpin)' : 'Click to lock sidebar'}
               >
-                <Building2 className="w-4 h-4 text-white" />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <g transform="rotate(-30 12 12)">
+                    <circle cx="7.3" cy="3.2" r="1.45" />
+                    <rect x="5.5" y="4.7" width="3.6" height="14.6" rx="1.8" />
+                    <rect x="14.9" y="4.7" width="3.6" height="14.6" rx="1.8" />
+                    <circle cx="16.7" cy="20.8" r="1.45" />
+                  </g>
+                </svg>
               </div>
               {isExpanded && (
                 <div className="truncate">
-                  <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                    <span>{activeTeam?.name || "Atlas Core Engineers"}</span>
-                  </div>
-                  <div className="text-[10px] text-neutral-400 font-mono">
-                    Tenant: {activeTeam?.id || 'ws_core'}
-                  </div>
+                  <div className="text-xs font-semibold text-white truncate">{activeTeam?.name || "Atlas Core Engineers"}</div>
+                  <div className="text-[10px] text-neutral-500">Workspace</div>
                 </div>
               )}
             </div>
@@ -109,12 +112,12 @@ export default function AppSidebar({
                 onClick={() => setSidebarPinned(!sidebarPinned)}
                 className={`p-1.5 rounded-lg text-xs transition border ${
                   sidebarPinned
-                    ? 'bg-white/20 border-white/40 text-white'
-                    : 'border-white/10 text-neutral-400 hover:text-white hover:bg-white/10'
+                    ? 'bg-white/15 border-white/30 text-white'
+                    : 'border-white/10 text-neutral-500 hover:text-white hover:bg-white/8'
                 }`}
-                title={sidebarPinned ? 'Unpin Sidebar (Auto-collapse on leave)' : 'Pin Sidebar Open'}
+                title={sidebarPinned ? 'Unpin Sidebar' : 'Pin Sidebar Open'}
               >
-                <Pin className={`w-3.5 h-3.5 ${sidebarPinned ? 'text-white' : 'text-neutral-400'}`} />
+                <Pin className={`w-3 h-3 ${sidebarPinned ? 'text-white' : 'text-neutral-500'}`} />
               </button>
             )}
           </div>
