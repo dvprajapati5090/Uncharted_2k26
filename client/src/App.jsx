@@ -660,14 +660,22 @@ export default function App() {
     }
   };
 
-  const handleSelectGraphNode = async (node) => {
-    setSelectedGraphNode(node);
+  const loadGraphLineage = async (nodeId) => {
     try {
-      const res = await fetch(`/api/graph/${node.id}`);
+      const id = typeof nodeId === 'object' && nodeId !== null ? nodeId.id : nodeId;
+      if (!id) return;
+      const res = await fetch(`/api/graph/${id}`);
       const data = await res.json();
       setGraphLineage(data);
     } catch (err) {
       console.error('Failed to fetch node graph lineage:', err);
+    }
+  };
+
+  const handleSelectGraphNode = async (node) => {
+    setSelectedGraphNode(node);
+    if (node?.id) {
+      await loadGraphLineage(node.id);
     }
   };
 
