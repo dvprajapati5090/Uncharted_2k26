@@ -28,6 +28,7 @@ import {
   ThumbsDown,
   Download,
   TrendingUp,
+  Pin,
   Award,
   Network,
   Share2,
@@ -50,6 +51,96 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
+function formatMessageContent(text) {
+  if (!text) return null;
+
+  // Check if text contains structured memory records like: 1. ["MEMORY RECORD #..."] or 1. '["MEMORY RECORD #..."]'
+  if (text.includes('MEMORY RECORD #')) {
+    const parts = text.split(/(?=\d+\.\s+['"\[]*MEMORY RECORD #)/g);
+    return (
+      <div className="space-y-2 mt-1">
+        {parts.map((part, pIdx) => {
+          const match = part.match(/MEMORY RECORD #([a-f0-9]+)/i);
+          if (match) {
+            const memId = match[1];
+            const statusMatch = part.match(/\*\*Status:\*\*\s*(\w+)/i);
+            const topicMatch = part.match(/\*\*Topic:\*\*\s*([^\n-]+)/i);
+            const directiveMatch = part.match(/\*\*Directive:\*\*\s*([^\n-]+)/i);
+            const reasonMatch = part.match(/\*\*Reason:\*\*\s*([^\n]+)/i);
+
+            const status = statusMatch ? statusMatch[1].toUpperCase() : 'ACTIVE';
+            const topic = topicMatch ? topicMatch[1].trim() : 'General';
+            const directive = directiveMatch ? directiveMatch[1].trim() : part.replace(/.*MEMORY RECORD #[a-f0-9]+['"\]]*/i, '').trim();
+            const reason = reasonMatch ? reasonMatch[1].trim() : null;
+
+            return (
+              <div
+                key={pIdx}
+                className="bg-black/60 border border-white/15 rounded-xl p-3.5 space-y-1.5 shadow-md"
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] bg-white/10 text-white px-2 py-0.5 rounded font-bold">
+                      #{memId.slice(0, 8)}
+                    </span>
+                    <span className="text-xs font-semibold text-white">{topic}</span>
+                  </div>
+                  <span
+                    className={`text-[9px] uppercase px-2 py-0.5 rounded font-bold ${
+                      status === 'ACTIVE'
+                        ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                    }`}
+                  >
+                    {status}
+                  </span>
+                </div>
+                <div className="text-xs font-medium text-neutral-200 leading-relaxed">
+                  {directive}
+                </div>
+                {reason && (
+                  <div className="text-[11px] text-neutral-400 italic bg-white/[0.02] p-2 rounded-lg border border-white/5">
+                    Why: {reason}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return (
+            <p key={pIdx} className="text-xs text-neutral-200 leading-relaxed">
+              {part}
+            </p>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Standard markdown rendering for bold text
+  const lines = text.split('\n');
+  return (
+    <div className="space-y-1 text-xs text-neutral-200 leading-relaxed">
+      {lines.map((line, lIdx) => {
+        const segments = line.split(/(\*\*[^*]+\*\*)/g);
+        return (
+          <p key={lIdx}>
+            {segments.map((seg, sIdx) => {
+              if (seg.startsWith('**') && seg.endsWith('**')) {
+                return (
+                  <strong key={sIdx} className="text-white font-semibold">
+                    {seg.slice(2, -2)}
+                  </strong>
+                );
+              }
+              return seg;
+            })}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App() {
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -60,6 +151,9 @@ export default function App() {
     }
     return 'landing';
   });
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [operationsMenuOpen, setOperationsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'ledger' | 'training'
   const [currentChannel, setCurrentChannel] = useState('architecture');
   const [channels, setChannels] = useState([]);
@@ -1081,10 +1175,10 @@ export default function App() {
           </button>
         </nav>
 
-        {/* Right Menu & Universal Tool Dock with Equal Spacing */}
-        <div className="flex items-center gap-1.5">
+        {/* Right Menu & Universal Tool Dock - Symmetrical, Luxury, No Clutter */}
+        <div className="flex items-center gap-2">
           {/* Universal Model Selector */}
-          <div className="flex items-center gap-1 bg-neutral-950 px-2 py-1 rounded-lg border border-white/15 text-xs shadow-sm">
+          <div className="flex items-center gap-1.5 bg-neutral-950 px-2.5 py-1.5 rounded-xl border border-white/15 text-xs shadow-sm">
             <Zap className="w-3.5 h-3.5 text-amber-400" />
             <select
               value={selectedModel}
@@ -1098,33 +1192,105 @@ export default function App() {
             </select>
             <button
               onClick={() => { loadLlmModels(); setLlmModalOpen(true); }}
-              className="p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition ml-0.5"
+              className="p-1 rounded-md hover:bg-white/10 text-neutral-400 hover:text-white transition"
               title="Configure API Keys"
             >
               <Key className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Equal Spaced Tool Dock Buttons */}
+          {/* Guided Demo - Glowing Action Pill */}
           <button
-            onClick={() => { setBenchmarkModalOpen(true); if (!benchmarkData) loadBenchmarkData(); }}
-            className="tool-dock-btn"
-            title="Live Comparative Benchmark Matrix"
+            onClick={handleRunGuidedDemo}
+            className="tool-dock-btn bg-white text-black font-semibold border-white hover:bg-neutral-200 shadow-md shadow-white/10"
+            title="Run 5-Step Architecture Verification Demo"
           >
-            <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden xl:inline">Benchmark</span>
+            <PlayCircle className="w-3.5 h-3.5 text-black" />
+            <span>Guided Demo</span>
           </button>
 
-          <button
-            onClick={handleExportDossier}
-            disabled={isExportingDossier}
-            className="tool-dock-btn"
-            title="Export Architecture Decision Record (ADR) Dossier"
-          >
-            <FileText className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden xl:inline">ADR Dossier</span>
-          </button>
+          {/* Operations Menu Dropdown - Consolidates Benchmark, ADR, Time Machine, Inspector, Reset */}
+          <div className="relative">
+            <button
+              onClick={() => setOperationsMenuOpen(!operationsMenuOpen)}
+              className={`tool-dock-btn ${operationsMenuOpen ? 'border-white/40 bg-white/20 text-white' : ''}`}
+              title="Operational Tools & Diagnostics"
+            >
+              <Cpu className="w-3.5 h-3.5 text-white" />
+              <span>Operations</span>
+              <ChevronDown className={`w-3 h-3 text-neutral-400 transition-transform ${operationsMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
 
+            {operationsMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setOperationsMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-64 rounded-xl obsidian-dropdown p-1.5 z-50 text-xs shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    onClick={() => { setOperationsMenuOpen(false); setBenchmarkModalOpen(true); if (!benchmarkData) loadBenchmarkData(); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-2.5 transition"
+                  >
+                    <BarChart2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-white">Live Benchmark Matrix</div>
+                      <div className="text-[10px] text-neutral-400">SynapseMem vs Naive RAG vs Bloat</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { setOperationsMenuOpen(false); handleExportDossier(); }}
+                    disabled={isExportingDossier}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-2.5 transition"
+                  >
+                    <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-white">Export ADR Dossier</div>
+                      <div className="text-[10px] text-neutral-400">Download formatted Markdown & JSON</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { setOperationsMenuOpen(false); setTimeMachineOpen(true); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-2.5 transition"
+                  >
+                    <History className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-white">Temporal Time Machine</div>
+                      <div className="text-[10px] text-neutral-400">Simulate date to test TTL expiry</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { setOperationsMenuOpen(false); setInspectOpen(!inspectOpen); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-2.5 transition"
+                  >
+                    <ScanEye className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-white">{inspectOpen ? 'Close Inspector' : 'Vector Inspector'}</div>
+                      <div className="text-[10px] text-neutral-400">Inspect 1024D Voyage embeddings</div>
+                    </div>
+                  </button>
+
+                  <div className="my-1.5 border-t border-white/10" />
+
+                  <button
+                    onClick={() => { setOperationsMenuOpen(false); handleWipeData(); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-950/60 text-rose-300 hover:text-rose-200 flex items-center gap-2.5 transition"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-rose-300">Reset Database Baseline</div>
+                      <div className="text-[10px] text-rose-400/80">Re-seed clean architectural decisions</div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Live Sync Status Pill */}
           <button
             onClick={() => { setRealtimeDrawerOpen(true); loadRealtimeData(); }}
             className="tool-dock-btn"
@@ -1132,50 +1298,10 @@ export default function App() {
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
             <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden xl:inline">Live Sync</span>
-            <span className="px-1 py-0.2 rounded bg-white/10 text-[10px] font-bold">
+            <span className="hidden sm:inline">Live Sync</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-[10px] font-bold">
               {realtimeHistory.length}
             </span>
-          </button>
-
-          <button
-            onClick={handleRunGuidedDemo}
-            className="tool-dock-btn bg-white/15 text-white border-white/30 hover:bg-white/25 font-semibold"
-            title="Run 5-Step Demo"
-          >
-            <PlayCircle className="w-3.5 h-3.5 text-white" />
-            <span className="hidden sm:inline">Guided Demo</span>
-          </button>
-
-          <button
-            onClick={() => setTimeMachineOpen(true)}
-            className="tool-dock-btn"
-            title="Time Machine (Temporal Expiry)"
-          >
-            <History className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden lg:inline">
-              {new Date(simulatedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          </button>
-
-          <button
-            onClick={handleWipeData}
-            className="tool-dock-btn hover:border-rose-500/50 hover:text-rose-300"
-            title="Wipe & Reset Memory Database"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden 2xl:inline">Reset</span>
-          </button>
-
-          <button
-            onClick={() => setInspectOpen(!inspectOpen)}
-            className={`tool-dock-btn ${
-              inspectOpen ? 'bg-white/25 border-white/50 text-white' : ''
-            }`}
-            title="Vector Inspection Drawer"
-          >
-            <ScanEye className="w-3.5 h-3.5 text-white" />
-            <span className="hidden xl:inline">Inspect</span>
           </button>
 
           {/* Active User Avatar */}
@@ -1195,50 +1321,167 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden relative">
         {/* VIEW 1: CHATBOT */}
         {activeTab === 'chat' && (
-          <div className="flex-1 flex overflow-hidden">
-            {/* Left Channels Sidebar */}
-            <aside className="w-56 border-r border-white/10 bg-neutral-950/90 flex flex-col shrink-0">
-              <div className="p-3 border-b border-white/10 text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
-                <span>Channels</span>
-                <span className="text-emerald-400 flex items-center gap-1 font-mono">
-                  <ShieldCheck className="w-3 h-3" /> MongoDB
-                </span>
-              </div>
-              <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-                {channels.map((ch) => {
-                  const isBot = ch.id === 'ask-assistant';
-                  const isActive = ch.id === currentChannel;
-                  return (
-                    <button
-                      key={ch.id}
-                      onClick={() => setCurrentChannel(ch.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between text-xs transition ${
-                        isActive
-                          ? 'bg-white/15 text-white font-semibold border border-white/25 shadow-sm'
-                          : 'text-neutral-400 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className={isActive ? 'text-white font-bold' : 'text-neutral-500'}>
-                          {isBot ? '🤖' : '#'}
-                        </span>
-                        <span className="truncate">{isBot ? 'AI Assistant' : ch.id}</span>
-                      </div>
-                      {isBot && (
-                        <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.5 rounded font-bold uppercase">
-                          Recall
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </nav>
+          <div className="flex-1 flex overflow-hidden relative">
+            {/* Left Hover-Activated Sliding Sidebar */}
+            <div
+              className="relative z-20 flex shrink-0"
+              onMouseEnter={() => setSidebarHovered(true)}
+              onMouseLeave={() => setSidebarHovered(false)}
+            >
+              {/* Collapsed Rail (54px) */}
+              <div className="w-[54px] border-r border-white/10 bg-[#050505] flex flex-col items-center justify-between py-3 shrink-0 select-none">
+                <div className="flex flex-col items-center gap-4">
+                  {/* Workspace Icon */}
+                  <div
+                    className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:border-white/40 transition"
+                    title={activeTeam?.name || 'Workspace Core'}
+                  >
+                    <Building2 className="w-4 h-4 text-white" />
+                  </div>
 
-              <div className="p-3 border-t border-white/10 bg-black/50 text-[11px] text-neutral-400 flex items-center justify-between">
-                <span>1024D Voyage Vectors</span>
-                <span className="font-bold text-emerald-400">Active</span>
+                  <div className="w-6 h-[1px] bg-white/10" />
+
+                  {/* Channel Quick Buttons */}
+                  <div className="flex flex-col items-center gap-2">
+                    {channels.map((ch) => {
+                      const isBot = ch.id === 'ask-assistant';
+                      const isActive = ch.id === currentChannel;
+                      return (
+                        <button
+                          key={ch.id}
+                          onClick={() => setCurrentChannel(ch.id)}
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs transition relative group ${
+                            isActive
+                              ? 'bg-white text-black font-bold shadow-lg shadow-white/20'
+                              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                          }`}
+                          title={isBot ? 'AI Assistant (Recall)' : `# ${ch.id}`}
+                        >
+                          {isBot ? '🤖' : '#'}
+                          {isActive && (
+                            <span className="absolute -left-1 w-1 h-3 rounded-full bg-white" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Rail Bottom: Status Dot & Pin */}
+                <div className="flex flex-col items-center gap-3">
+                  <div
+                    className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse cursor-pointer"
+                    title="1024D Voyage Vectors Active"
+                  />
+                  <button
+                    onClick={() => setSidebarPinned(!sidebarPinned)}
+                    className={`p-1.5 rounded-lg border transition ${
+                      sidebarPinned
+                        ? 'bg-white/20 border-white/40 text-white'
+                        : 'border-transparent text-neutral-500 hover:text-white'
+                    }`}
+                    title={sidebarPinned ? 'Unpin Sidebar (Auto-collapse on mouse leave)' : 'Pin Sidebar Open'}
+                  >
+                    <Pin className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            </aside>
+
+              {/* Expanded Flyout Panel (270px) on Hover or Pin */}
+              {(sidebarHovered || sidebarPinned) && (
+                <aside
+                  className="absolute top-0 left-0 bottom-0 w-[270px] border-r border-white/15 bg-neutral-950/95 backdrop-blur-3xl flex flex-col shadow-2xl z-30 animate-in fade-in slide-in-from-left-2 duration-200"
+                  style={{
+                    boxShadow: '25px 0 50px -10px rgba(0, 0, 0, 0.95), 0 0 30px rgba(255, 255, 255, 0.04)'
+                  }}
+                >
+                  {/* Workspace Switcher Header */}
+                  <div className="p-3.5 border-b border-white/10 flex items-center justify-between bg-black/40">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        <Building2 className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                          <span>{activeTeam?.name || 'Atlas Core Engineers'}</span>
+                        </div>
+                        <div className="text-[10px] text-neutral-400 font-mono">Tenant: {activeTeam?.id || 'ws_core'}</div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setSidebarPinned(!sidebarPinned)}
+                      className={`p-1.5 rounded-md text-xs transition border ${
+                        sidebarPinned
+                          ? 'bg-white/20 border-white/40 text-white'
+                          : 'border-white/10 text-neutral-400 hover:text-white hover:bg-white/10'
+                      }`}
+                      title={sidebarPinned ? 'Unpin Sidebar' : 'Pin Sidebar'}
+                    >
+                      <Pin className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Channels Section */}
+                  <div className="p-3 border-b border-white/10 text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Channels</span>
+                    <span className="text-emerald-400 flex items-center gap-1 font-mono text-[9px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Atlas Sync
+                    </span>
+                  </div>
+
+                  <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+                    {channels.map((ch) => {
+                      const isBot = ch.id === 'ask-assistant';
+                      const isActive = ch.id === currentChannel;
+                      return (
+                        <button
+                          key={ch.id}
+                          onClick={() => setCurrentChannel(ch.id)}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between text-xs transition ${
+                            isActive
+                              ? 'bg-white text-black font-semibold shadow-lg shadow-white/10'
+                              : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 truncate">
+                            <span className={`text-xs ${isActive ? 'text-black font-bold' : 'text-neutral-400'}`}>
+                              {isBot ? '🤖' : '#'}
+                            </span>
+                            <span className="truncate">{isBot ? 'AI Assistant' : ch.id}</span>
+                          </div>
+                          {isBot ? (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                              isActive ? 'bg-black text-white' : 'bg-white/10 text-neutral-300'
+                            }`}>
+                              Recall
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-neutral-500 font-mono">
+                              {messages.filter(m => m.channel === ch.id).length || ''}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </nav>
+
+                  {/* Footer System Stats */}
+                  <div className="p-3 border-t border-white/10 bg-black/60 text-[11px] space-y-1.5">
+                    <div className="flex items-center justify-between text-neutral-400">
+                      <span>Vector Dimension:</span>
+                      <span className="font-mono text-white text-[10px] bg-white/10 px-1.5 py-0.5 rounded">1024D Voyage</span>
+                    </div>
+                    <div className="flex items-center justify-between text-neutral-400">
+                      <span>Atlas Engine:</span>
+                      <span className="font-semibold text-emerald-400 flex items-center gap-1 text-[10px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Connected
+                      </span>
+                    </div>
+                  </div>
+                </aside>
+              )}
+            </div>
 
             {/* Chat Stream Area */}
             <div className="flex-1 flex flex-col overflow-hidden bg-black/40">
@@ -1265,10 +1508,10 @@ export default function App() {
               {/* Messages Container */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
                 {messages.length === 0 ? (
-                  <div className="text-center py-20 text-slate-500 space-y-2">
-                    <MessageSquare className="w-9 h-9 mx-auto text-slate-600" />
-                    <p className="text-xs font-semibold text-slate-400">No messages in #{currentChannel} yet.</p>
-                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                  <div className="text-center py-20 text-neutral-500 space-y-2">
+                    <MessageSquare className="w-9 h-9 mx-auto text-neutral-600" />
+                    <p className="text-xs font-semibold text-neutral-300">No messages in #{currentChannel} yet.</p>
+                    <p className="text-[11px] text-neutral-500 max-w-sm mx-auto">
                       {currentChannel === 'ask-assistant'
                         ? 'Ask any question to test persistent memory grounding and behavioral adaptation.'
                         : 'Post a decision like "For Project Atlas, we use MongoDB..." to extract a structured memory.'}
@@ -1278,41 +1521,43 @@ export default function App() {
                   messages.map((msg, idx) => (
                     <div
                       key={msg.id || idx}
-                      className={`flex flex-col space-y-1.5 ${
-                        msg.is_assistant ? 'bg-indigo-950/20 border border-indigo-900/50 p-3.5 rounded-xl shadow-lg' : 'p-2'
+                      className={`flex flex-col space-y-2 transition-all ${
+                        msg.is_assistant
+                          ? 'bg-neutral-900/70 border border-white/10 hover:border-white/20 p-4 rounded-2xl backdrop-blur-md shadow-xl'
+                          : 'p-3 bg-white/[0.03] border border-white/10 rounded-xl max-w-3xl'
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <div
                           className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${
-                            msg.is_assistant ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-200'
+                            msg.is_assistant ? 'bg-white text-black' : 'bg-neutral-800 text-white'
                           }`}
                         >
                           {msg.is_assistant ? '🤖' : msg.sender?.charAt(0)}
                         </div>
-                        <span className={`text-xs font-bold ${msg.is_assistant ? 'text-indigo-300' : 'text-slate-200'}`}>
+                        <span className={`text-xs font-semibold ${msg.is_assistant ? 'text-white' : 'text-neutral-300'}`}>
                           {msg.sender}
                         </span>
-                        <span className="text-[10px] text-slate-500">
+                        <span className="text-[10px] text-neutral-500 font-mono">
                           {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                         {msg.is_assistant && (
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${
                               msg.inspection_data?.promptPayload?.isLiveModel
-                                ? 'bg-emerald-950 text-emerald-300 border-emerald-700/60'
-                                : 'bg-indigo-900/80 text-indigo-300 border-indigo-700/50'
+                                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                                : 'bg-white/10 text-neutral-200 border-white/20'
                             }`}>
                               {msg.inspection_data?.promptPayload?.isLiveModel ? '🟢 Live Cloud Model' : '⚡ Memory Grounded'}
                             </span>
                             {msg.inspection_data?.promptPayload?.providerUsed && (
-                              <span className="text-[9px] text-slate-400 font-mono">
+                              <span className="text-[9px] text-neutral-400 font-mono">
                                 [{msg.inspection_data.promptPayload.providerUsed}]
                               </span>
                             )}
                             {msg.inspection_data?.promptPayload?.liveError && !msg.inspection_data?.promptPayload?.isLiveModel && selectedModel !== 'local-grounded' && (
                               <span
-                                className="text-[9px] text-amber-300 bg-amber-950/70 border border-amber-800/80 rounded px-1.5 py-0.5 font-mono"
+                                className="text-[9px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5 font-mono"
                                 title={msg.inspection_data.promptPayload.liveError}
                               >
                                 ⚠️ Note: {msg.inspection_data.promptPayload.liveError.length > 55 ? msg.inspection_data.promptPayload.liveError.substring(0, 52) + '...' : msg.inspection_data.promptPayload.liveError}
@@ -1322,25 +1567,25 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="text-xs text-slate-200 pl-8 leading-relaxed font-normal">
-                        {msg.text}
+                      <div className="text-xs text-neutral-200 pl-8 leading-relaxed font-normal">
+                        {formatMessageContent(msg.text)}
                         {msg.isStreaming && (
-                          <span className="inline-block w-2 h-3.5 bg-indigo-400 animate-pulse ml-1 align-middle"></span>
+                          <span className="inline-block w-2 h-3.5 bg-white animate-pulse ml-1 align-middle"></span>
                         )}
                       </div>
 
                       {/* Dual-Mode Baseline Contrast Box */}
                       {msg.is_assistant && msg.withoutMemoryAnswer && (
-                        <div className="mt-2.5 mx-8 p-3 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] space-y-1">
-                          <div className="flex items-center justify-between text-slate-400 font-semibold">
+                        <div className="mt-2 mx-8 p-3 rounded-xl bg-black/60 border border-white/10 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between text-neutral-400 font-semibold">
                             <span className="flex items-center gap-1.5 text-amber-400 font-bold">
                               <Split className="w-3.5 h-3.5" /> Dual-Mode Baseline: "Without Memory"
                             </span>
-                            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">
+                            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-white/10 text-neutral-300 font-bold font-mono">
                               Contrast
                             </span>
                           </div>
-                          <p className="text-slate-400 leading-normal italic">{msg.withoutMemoryAnswer}</p>
+                          <p className="text-neutral-400 leading-normal italic">{msg.withoutMemoryAnswer}</p>
                         </div>
                       )}
 
@@ -1349,7 +1594,7 @@ export default function App() {
                         <div className="pl-8 pt-1 flex items-center gap-2">
                           <div
                             onClick={() => { setActiveTab('ledger'); loadMemories(); }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 shadow cursor-pointer hover:bg-emerald-900 transition memory-pulse-card"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 shadow cursor-pointer hover:bg-emerald-500/20 transition memory-pulse-card"
                           >
                             <BrainCircuit className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Memory Persisted to MongoDB Atlas</span>
@@ -1366,23 +1611,23 @@ export default function App() {
                                 setActiveInspection(msg.inspection_data);
                                 setInspectOpen(true);
                               }}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700 transition"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-white/5 hover:bg-white/10 text-neutral-200 border border-white/15 transition"
                             >
-                              <ScanEye className="w-3 h-3 text-indigo-400" />
+                              <ScanEye className="w-3 h-3 text-white" />
                               <span>Inspect Retrieval Metrics</span>
                             </button>
                           )}
 
-                          <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 rounded-lg p-0.5 text-[10px]">
-                            <span className="text-slate-500 font-semibold px-1.5 flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-black/80 border border-white/10 rounded-lg p-0.5 text-[10px]">
+                            <span className="text-neutral-500 font-semibold px-1.5 flex items-center gap-1">
                               <Award className="w-3 h-3 text-amber-400" /> RLHF:
                             </span>
                             <button
                               onClick={() => handleFeedback(msg, 1)}
                               className={`px-2 py-0.5 rounded transition flex items-center gap-1 ${
                                 feedbackMap[msg.id] === 1
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold'
-                                  : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                                  : 'text-neutral-400 hover:text-emerald-400 hover:bg-white/5'
                               }`}
                               title="Reinforce: Accurately followed stored team constraints"
                             >
@@ -1393,8 +1638,8 @@ export default function App() {
                               onClick={() => handleFeedback(msg, -1)}
                               className={`px-2 py-0.5 rounded transition flex items-center gap-1 ${
                                 feedbackMap[msg.id] === -1
-                                  ? 'bg-rose-950 text-rose-300 border border-rose-700 font-bold'
-                                  : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
+                                  : 'text-neutral-400 hover:text-rose-400 hover:bg-white/5'
                               }`}
                               title="Penalize: Violated team constraints or hallucinated"
                             >
@@ -1411,18 +1656,18 @@ export default function App() {
               </div>
 
               {/* Chat Input */}
-              <div className="p-3 border-t border-slate-800 bg-slate-950/80">
+              <div className="p-3 border-t border-white/10 bg-neutral-950/80">
                 {channelQuickPrompts[currentChannel] && (
                   <div className="flex items-center gap-1.5 pb-2 mb-1 overflow-x-auto text-[11px] no-scrollbar">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase shrink-0 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-indigo-400" /> Quick Try:
+                    <span className="text-[10px] text-neutral-500 font-bold uppercase shrink-0 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-white" /> Quick Try:
                     </span>
                     {channelQuickPrompts[currentChannel].map((prompt, pIdx) => (
                       <button
                         key={pIdx}
                         type="button"
                         onClick={() => setInputText(prompt)}
-                        className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-600 transition text-[11px] truncate max-w-xs text-left"
+                        className="shrink-0 px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 transition text-[11px] truncate max-w-xs text-left shadow-sm"
                         title={prompt}
                       >
                         {prompt}
@@ -1504,24 +1749,24 @@ export default function App() {
 
         {/* VIEW 2: MEMORY LEDGER */}
         {activeTab === 'ledger' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+          <div className="flex-1 flex flex-col overflow-hidden bg-black">
             {/* Header / Subnav */}
-            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between flex-wrap gap-3">
+            <div className="p-4 border-b border-white/10 bg-neutral-950/80 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Database className="w-4 h-4 text-indigo-400" />
+                  <Database className="w-4 h-4 text-white" />
                   Structured Memory Ledger (MongoDB Atlas)
                 </h2>
-                <p className="text-[11px] text-slate-400">Every memory is an authoritative document with 1024D Voyage embeddings.</p>
+                <p className="text-[11px] text-neutral-400">Authoritative team directives embedded with 1024D Voyage dense vectors.</p>
               </div>
 
               <div className="flex items-center gap-2">
                 {/* View Mode Toggle */}
-                <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex text-xs">
+                <div className="bg-neutral-950 p-1 rounded-xl border border-white/15 flex text-xs">
                   <button
                     onClick={() => setLedgerView('cards')}
-                    className={`px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                      ledgerView === 'cards' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
+                      ledgerView === 'cards' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" /> Cards
@@ -1531,8 +1776,8 @@ export default function App() {
                       setLedgerView('graph');
                       loadGraphData();
                     }}
-                    className={`px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                      ledgerView === 'graph' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
+                      ledgerView === 'graph' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
                     }`}
                   >
                     <Network className="w-3.5 h-3.5" /> Knowledge Graph
@@ -1542,8 +1787,8 @@ export default function App() {
                       setLedgerView('hierarchy');
                       loadHierarchyData();
                     }}
-                    className={`px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                      ledgerView === 'hierarchy' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
+                      ledgerView === 'hierarchy' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
                     }`}
                   >
                     <FolderTree className="w-3.5 h-3.5" /> Domain Hierarchy
@@ -1551,13 +1796,13 @@ export default function App() {
                 </div>
 
                 {ledgerView === 'cards' && (
-                  <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex text-xs">
+                  <div className="bg-neutral-950 p-1 rounded-xl border border-white/15 flex text-xs">
                     {['all', 'active', 'superseded', 'expired'].map((filter) => (
                       <button
                         key={filter}
                         onClick={() => setLedgerFilter(filter)}
-                        className={`px-3 py-1 rounded-lg font-medium capitalize transition ${
-                          ledgerFilter === filter ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        className={`px-3 py-1.5 rounded-lg font-medium capitalize transition ${
+                          ledgerFilter === filter ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
                         }`}
                       >
                         {filter}
@@ -1575,7 +1820,7 @@ export default function App() {
                       }
                       setLinkModalOpen(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1.5 transition shadow"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow"
                   >
                     <Link2 className="w-3.5 h-3.5" /> Link Lineage
                   </button>
@@ -1585,7 +1830,7 @@ export default function App() {
                   <button
                     onClick={handleRecluster}
                     disabled={isClustering}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition shadow disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow disabled:opacity-50"
                   >
                     <Boxes className="w-3.5 h-3.5" /> {isClustering ? 'Clustering...' : 'Re-cluster'}
                   </button>
@@ -1593,7 +1838,7 @@ export default function App() {
 
                 <button
                   onClick={() => openAddModal()}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition shadow"
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow"
                 >
                   <Plus className="w-4 h-4" /> Add Decision
                 </button>
@@ -1604,10 +1849,10 @@ export default function App() {
             {ledgerView === 'cards' && (
               <div className="flex-1 overflow-y-auto p-4">
                 {memories.length === 0 ? (
-                  <div className="text-center py-24 text-slate-500 space-y-2">
-                    <Database className="w-8 h-8 mx-auto text-slate-600" />
-                    <p className="text-xs font-semibold text-slate-400">No memory documents found.</p>
-                    <p className="text-[11px] text-slate-500">Post a decision in chat or click "+ Add Decision".</p>
+                  <div className="text-center py-24 text-neutral-500 space-y-2">
+                    <Database className="w-8 h-8 mx-auto text-neutral-600" />
+                    <p className="text-xs font-semibold text-neutral-300">No memory documents found.</p>
+                    <p className="text-[11px] text-neutral-500">Post a decision in chat or click "+ Add Decision".</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
@@ -1616,38 +1861,38 @@ export default function App() {
                       return (
                         <div
                           key={mem.id}
-                          className={`memory-card bg-slate-900 border rounded-xl p-4 flex flex-col justify-between space-y-3 ${
+                          className={`memory-card bg-neutral-900/70 border rounded-2xl p-4.5 flex flex-col justify-between space-y-3 backdrop-blur-md transition ${
                             mem.status === 'active'
-                              ? 'border-emerald-800/40 shadow-emerald-950/20'
+                              ? 'border-emerald-500/30 shadow-lg shadow-emerald-950/20'
                               : mem.status === 'superseded'
-                              ? 'border-amber-800/40 shadow-amber-950/20'
-                              : 'border-slate-800 opacity-80'
+                              ? 'border-amber-500/30 shadow-lg shadow-amber-950/20'
+                              : 'border-white/10 opacity-70'
                           }`}
                         >
                           <div>
-                            <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center justify-between mb-2">
                               <span className="font-bold text-xs text-white">{mem.topic}</span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
                                   mem.status === 'active'
-                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
                                     : mem.status === 'superseded'
-                                    ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                    ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                                    : 'bg-white/10 text-neutral-400 border border-white/10'
                                 }`}
                               >
                                 {mem.status}
                               </span>
                             </div>
-                            <p className="text-xs font-semibold text-slate-100 mb-1">{mem.decision}</p>
+                            <p className="text-xs font-semibold text-neutral-100 mb-1.5 leading-relaxed">{mem.decision}</p>
                             {mem.reason && (
-                              <div className="text-[11px] text-slate-300 bg-slate-950/80 p-2 rounded-lg border border-slate-800">
-                                <span className="text-slate-500 font-medium">Why:</span> {mem.reason}
+                              <div className="text-[11px] text-neutral-300 bg-black/60 p-2.5 rounded-xl border border-white/10">
+                                <span className="text-neutral-500 font-medium">Why:</span> {mem.reason}
                               </div>
                             )}
 
                             {mem.superseded_by && (
-                              <div className="text-[10px] text-amber-400 font-medium flex items-center gap-1 mt-2">
+                              <div className="text-[10px] text-amber-400 font-medium flex items-center gap-1 mt-2 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">
                                 <ArrowRight className="w-3 h-3" /> Superseded by newer directive
                               </div>
                             )}
@@ -1655,7 +1900,7 @@ export default function App() {
                             {mem.valid_until && (
                               <div
                                 className={`text-[10px] font-medium flex items-center gap-1 mt-1.5 ${
-                                  isPast ? 'text-rose-400' : 'text-indigo-400'
+                                  isPast ? 'text-rose-400' : 'text-neutral-400'
                                 }`}
                               >
                                 <Clock className="w-3 h-3" /> {isPast ? 'Expired:' : 'Valid until:'}{' '}
@@ -1664,10 +1909,10 @@ export default function App() {
                             )}
                           </div>
 
-                          <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                          <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-neutral-400">
                             <div className="flex items-center gap-2">
-                              <span>Owner: <strong className="text-slate-300">{mem.owner}</strong></span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono">
+                              <span>Owner: <strong className="text-neutral-200">{mem.owner}</strong></span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/80 border border-white/10 text-neutral-300 font-mono">
                                 {Math.round((mem.confidence || 0.95) * 100)}% conf
                               </span>
                               {(mem.reinforcementUp || 0) > 0 && (
@@ -1684,14 +1929,14 @@ export default function App() {
                             <div className="flex items-center space-x-1">
                               <button
                                 onClick={() => openAddModal(mem)}
-                                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200"
+                                className="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
                                 title="Edit decision"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteMemory(mem.id)}
-                                className="p-1.5 rounded hover:bg-rose-950/60 text-slate-400 hover:text-rose-400"
+                                className="p-1.5 rounded hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition"
                                 title="Forget / Delete"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1710,11 +1955,11 @@ export default function App() {
             {ledgerView === 'graph' && (
               <div className="flex-1 flex overflow-hidden">
                 {/* Visual Topology Canvas */}
-                <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-950">
+                <div className="flex-1 flex flex-col overflow-hidden relative bg-neutral-950">
                   {/* Canvas Stats Bar */}
-                  <div className="px-4 py-2 border-b border-slate-800/80 bg-slate-900/30 flex items-center justify-between text-xs">
+                  <div className="px-4 py-2 border-b border-white/10 bg-neutral-900/30 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-800 text-indigo-300 font-mono text-[10px]">
+                      <span className="px-2 py-0.5 rounded bg-white/10 border border-white/15 text-neutral-200 font-mono text-[10px]">
                         Nodes: <strong>{graphData.summary?.totalNodes || graphData.nodes?.length || 0}</strong>
                       </span>
                       <span className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[10px]">
@@ -1728,7 +1973,7 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                    <div className="flex items-center gap-3 text-[11px] text-neutral-400">
                       <span className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Active
                       </span>
@@ -1744,10 +1989,10 @@ export default function App() {
                   {/* SVG Topology Viewport */}
                   <div className="flex-1 relative overflow-auto flex items-center justify-center p-4">
                     {(!graphData.nodes || graphData.nodes.length === 0) ? (
-                      <div className="text-center py-20 text-slate-500 space-y-2">
-                        <Network className="w-10 h-10 mx-auto text-slate-600 animate-pulse" />
-                        <p className="text-xs font-semibold text-slate-400">No nodes in knowledge graph.</p>
-                        <p className="text-[11px] text-slate-500">Seed demo data or post decisions to visualize relationship edges.</p>
+                      <div className="text-center py-20 text-neutral-500 space-y-2">
+                        <Network className="w-10 h-10 mx-auto text-neutral-600 animate-pulse" />
+                        <p className="text-xs font-semibold text-neutral-400">No nodes in knowledge graph.</p>
+                        <p className="text-[11px] text-neutral-500">Seed demo data or post decisions to visualize relationship edges.</p>
                       </div>
                     ) : (
                       <svg
@@ -1975,8 +2220,8 @@ export default function App() {
                 </div>
 
                 {/* Right Panel: GraphRAG Multi-Hop Lineage Inspector */}
-                <div className="w-80 md:w-96 border-l border-slate-800 bg-slate-900/60 flex flex-col overflow-y-auto">
-                  <div className="p-3.5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
+                <div className="w-80 md:w-96 border-l border-white/10 bg-neutral-900/60 flex flex-col overflow-y-auto">
+                  <div className="p-3.5 border-b border-white/10 bg-black/70 flex items-center justify-between">
                     <h3 className="text-xs font-bold text-white flex items-center gap-2">
                       <Share2 className="w-4 h-4 text-purple-400" />
                       GraphRAG Multi-Hop Lineage
@@ -1987,34 +2232,34 @@ export default function App() {
                   </div>
 
                   {!selectedGraphNode ? (
-                    <div className="p-6 text-center text-slate-500 space-y-2">
-                      <Network className="w-8 h-8 mx-auto text-slate-600" />
-                      <p className="text-xs font-medium text-slate-400">Select any node on the graph</p>
-                      <p className="text-[11px] text-slate-500">Inspect multi-hop architectural dependencies, upstream/downstream relations, and RAG context.</p>
+                    <div className="p-6 text-center text-neutral-500 space-y-2">
+                      <Network className="w-8 h-8 mx-auto text-neutral-600" />
+                      <p className="text-xs font-medium text-neutral-400">Select any node on the graph</p>
+                      <p className="text-[11px] text-neutral-500">Inspect multi-hop architectural dependencies, upstream/downstream relations, and RAG context.</p>
                     </div>
                   ) : (
                     <div className="p-4 space-y-4 text-xs">
                       {/* Active Node Detail Card */}
-                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                      <div className="bg-neutral-950 p-3.5 rounded-xl border border-white/10 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-indigo-400 text-xs">{selectedGraphNode.topic}</span>
+                          <span className="font-bold text-white text-xs">{selectedGraphNode.topic}</span>
                           <span
                             className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
                               selectedGraphNode.status === 'active'
                                 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                                 : selectedGraphNode.status === 'superseded'
                                 ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                : 'bg-slate-800 text-slate-400'
+                                : 'bg-neutral-800 text-neutral-400'
                             }`}
                           >
                             {selectedGraphNode.status}
                           </span>
                         </div>
-                        <p className="text-slate-100 font-semibold text-xs leading-relaxed">
+                        <p className="text-white font-semibold text-xs leading-relaxed">
                           {selectedGraphNode.statement || selectedGraphNode.label || selectedGraphNode.decision}
                         </p>
-                        <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
-                          <span>Owner: <strong className="text-slate-300">{selectedGraphNode.owner}</strong></span>
+                        <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-neutral-400">
+                          <span>Owner: <strong className="text-neutral-300">{selectedGraphNode.owner}</strong></span>
                           <span>Confidence: <strong>{Math.round((selectedGraphNode.confidence || 0.95) * 100)}%</strong></span>
                         </div>
                       </div>
@@ -2022,17 +2267,17 @@ export default function App() {
                       {/* Multi-Hop Traversed Neighbors */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
                             <Layers className="w-3.5 h-3.5 text-purple-400" />
                             Multi-Hop Lineage Path
                           </span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-neutral-400">
                             {graphLineage?.neighbors?.length || 0} Connected
                           </span>
                         </div>
 
                         {(!graphLineage?.neighbors || graphLineage.neighbors.length === 0) ? (
-                          <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-slate-500 text-[11px] text-center">
+                          <div className="bg-black/60 border border-white/10 rounded-xl p-3 text-neutral-500 text-[11px] text-center">
                             Direct root memory. No multi-hop dependencies linked yet.
                           </div>
                         ) : (
@@ -2040,7 +2285,7 @@ export default function App() {
                             {graphLineage.neighbors.map((nbr, idx) => (
                               <div
                                 key={idx}
-                                className="bg-slate-950 p-2.5 rounded-xl border border-purple-900/40 hover:border-purple-700/60 transition space-y-1"
+                                className="bg-neutral-950 p-2.5 rounded-xl border border-purple-900/40 hover:border-purple-700/60 transition space-y-1"
                               >
                                 <div className="flex items-center justify-between text-[10px]">
                                   <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-bold border border-purple-800">
@@ -2050,7 +2295,7 @@ export default function App() {
                                     {nbr.label || nbr.relationship || nbr.type}
                                   </span>
                                 </div>
-                                <p className="text-slate-200 text-[11px] font-medium leading-snug">
+                                <p className="text-neutral-200 text-[11px] font-medium leading-snug">
                                   {nbr.node?.statement || nbr.node?.label || nbr.node?.decision}
                                 </p>
                               </div>
@@ -2062,22 +2307,22 @@ export default function App() {
                       {/* GraphRAG Prompt Context Box */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
                             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                             GraphRAG Prompt Grounding
                           </span>
                           <span className="text-[10px] text-emerald-400 font-mono">Zero Hallucination</span>
                         </div>
-                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[10px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                        <div className="bg-neutral-950 p-3 rounded-xl border border-white/10 font-mono text-[10px] text-neutral-300 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
                           {graphLineage?.graphContextText || 'Tracing relational graph context...'}
                         </div>
-                        <p className="text-[10px] text-slate-500">
+                        <p className="text-[10px] text-neutral-500">
                           MongoDB Atlas traverses architectural edges up to 2 hops, grounding AI responses with complete relational context.
                         </p>
                       </div>
 
                       {/* Action buttons */}
-                      <div className="pt-2 border-t border-slate-800 flex gap-2">
+                      <div className="pt-2 border-t border-white/10 flex gap-2">
                         <button
                           onClick={() => {
                             setLinkSource(selectedGraphNode.id);
@@ -2100,14 +2345,14 @@ export default function App() {
             {ledgerView === 'hierarchy' && (
               <div className="flex-1 flex overflow-hidden">
                 {/* Left Pane: Macro Architectural Domain Clusters */}
-                <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 border-r border-slate-800">
+                <div className="flex-1 flex flex-col overflow-hidden bg-neutral-950 border-r border-white/10">
                   {/* Summary Ribbon */}
-                  <div className="px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/40 flex items-center justify-between text-xs flex-wrap gap-2">
+                  <div className="px-4 py-2.5 border-b border-white/10 bg-neutral-900/40 flex items-center justify-between text-xs flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <span className="px-2.5 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[11px] font-bold">
                         Domains: {hierarchyData.summary?.totalClusters || hierarchyData.clusters?.length || 0}
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-lg bg-indigo-950/80 border border-indigo-800 text-indigo-300 font-mono text-[11px] font-bold">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-white/10 border border-white/15 text-neutral-200 font-mono text-[11px] font-bold">
                         Clustered Decisions: {hierarchyData.summary?.totalDecisions || 0}
                       </span>
                       <span className="px-2.5 py-0.5 rounded-lg bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1">
@@ -2115,7 +2360,7 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="text-[10px] text-slate-400 flex items-center gap-1.5 font-mono">
+                    <div className="text-[10px] text-neutral-400 flex items-center gap-1.5 font-mono">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                       Voyage-4 1024D Centroid Index
                     </div>
@@ -2124,10 +2369,10 @@ export default function App() {
                   {/* Clusters List */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {(!hierarchyData.clusters || hierarchyData.clusters.length === 0) ? (
-                      <div className="text-center py-24 text-slate-500 space-y-2">
-                        <FolderTree className="w-10 h-10 mx-auto text-slate-600 animate-pulse" />
-                        <p className="text-xs font-semibold text-slate-400">No domain clusters computed yet.</p>
-                        <p className="text-[11px] text-slate-500">Click "Re-cluster" to synthesize hierarchical domains from memories.</p>
+                      <div className="text-center py-24 text-neutral-500 space-y-2">
+                        <FolderTree className="w-10 h-10 mx-auto text-neutral-600 animate-pulse" />
+                        <p className="text-xs font-semibold text-neutral-400">No domain clusters computed yet.</p>
+                        <p className="text-[11px] text-neutral-500">Click "Re-cluster" to synthesize hierarchical domains from memories.</p>
                       </div>
                     ) : (
                       hierarchyData.clusters.map((cluster) => {
@@ -2138,8 +2383,8 @@ export default function App() {
                             onClick={() => setSelectedCluster(cluster)}
                             className={`rounded-2xl border transition p-4 space-y-3 cursor-pointer ${
                               isSelected
-                                ? 'bg-slate-900 border-emerald-500/80 shadow-lg shadow-emerald-950/30'
-                                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                                ? 'bg-neutral-900 border-emerald-500/80 shadow-lg shadow-emerald-950/30'
+                                : 'bg-neutral-900/60 border-white/10 hover:border-white/15'
                             }`}
                           >
                             {/* Domain Header */}
@@ -2151,11 +2396,11 @@ export default function App() {
                                 <div>
                                   <h3 className="text-xs font-bold text-white flex items-center gap-2">
                                     {cluster.name}
-                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 border border-white/15 text-neutral-300">
                                       {cluster.topic}
                                     </span>
                                   </h3>
-                                  <p className="text-[10px] text-slate-400">
+                                  <p className="text-[10px] text-neutral-400">
                                     {cluster.childCount} Child Directives • 1024D Macro Centroid Vector
                                   </p>
                                 </div>
@@ -2177,19 +2422,19 @@ export default function App() {
                             </div>
 
                             {/* Macro Directive Synthesis */}
-                            <div className="bg-slate-950/90 rounded-xl p-3 border border-emerald-900/40 text-xs">
+                            <div className="bg-black/80 rounded-xl p-3 border border-emerald-900/40 text-xs">
                               <div className="text-[10px] font-bold text-emerald-400 mb-1 flex items-center gap-1">
                                 <ShieldCheck className="w-3 h-3 text-emerald-400" /> Macro Domain Policy:
                               </div>
-                              <p className="text-slate-200 font-medium leading-relaxed italic">
+                              <p className="text-neutral-200 font-medium leading-relaxed italic">
                                 "{cluster.macroDirective}"
                               </p>
                             </div>
 
                             {/* Child Micro-Decisions */}
                             <div className="space-y-1.5 pt-1">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                                <Workflow className="w-3 h-3 text-indigo-400" /> Resolved Child Micro-Decisions
+                              <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
+                                <Workflow className="w-3 h-3 text-white" /> Resolved Child Micro-Decisions
                               </div>
                               <div className="grid grid-cols-1 gap-2">
                                 {cluster.children.map((child) => (
@@ -2197,14 +2442,14 @@ export default function App() {
                                     key={child.id}
                                     className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
                                       child.status === 'active'
-                                        ? 'bg-slate-950 border-slate-800 text-slate-200'
+                                        ? 'bg-neutral-950 border-white/10 text-neutral-200'
                                         : child.status === 'superseded'
-                                        ? 'bg-slate-950/70 border-amber-900/40 text-slate-400'
-                                        : 'bg-slate-950/50 border-slate-900 text-slate-500'
+                                        ? 'bg-black/70 border-amber-900/40 text-neutral-400'
+                                        : 'bg-black/50 border-white/10 text-neutral-500'
                                     }`}
                                   >
                                     <div className="flex items-center gap-2 min-w-0 pr-2">
-                                      <span className="text-indigo-400 font-bold font-mono text-xs">↳</span>
+                                      <span className="text-white font-bold font-mono text-xs">↳</span>
                                       <span className="truncate font-medium text-[11px]">{child.statement}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -2214,12 +2459,12 @@ export default function App() {
                                             ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                                             : child.status === 'superseded'
                                             ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                            : 'bg-slate-800 text-slate-400'
+                                            : 'bg-neutral-800 text-neutral-400'
                                         }`}
                                       >
                                         {child.status}
                                       </span>
-                                      <span className="text-[9px] text-slate-400 font-mono">
+                                      <span className="text-[9px] text-neutral-400 font-mono">
                                         by {child.owner}
                                       </span>
                                     </div>
@@ -2235,8 +2480,8 @@ export default function App() {
                 </div>
 
                 {/* Right Pane: Interactive Hierarchical Multi-Vector Sandbox */}
-                <div className="w-80 md:w-96 bg-slate-900/60 flex flex-col overflow-y-auto">
-                  <div className="p-3.5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
+                <div className="w-80 md:w-96 bg-neutral-900/60 flex flex-col overflow-y-auto">
+                  <div className="p-3.5 border-b border-white/10 bg-black/70 flex items-center justify-between">
                     <h3 className="text-xs font-bold text-white flex items-center gap-2">
                       <Boxes className="w-4 h-4 text-emerald-400" />
                       Multi-Vector Domain Sandbox
@@ -2247,7 +2492,7 @@ export default function App() {
                   </div>
 
                   <div className="p-4 space-y-4 text-xs">
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                    <p className="text-[11px] text-neutral-400 leading-relaxed">
                       Test multi-tier retrieval: queries first match the 1024D centroid of the macro architectural domain, preventing cross-topic contamination before resolving micro-decisions.
                     </p>
 
@@ -2258,7 +2503,7 @@ export default function App() {
                           value={hierarchySearchQuery}
                           onChange={(e) => setHierarchySearchQuery(e.target.value)}
                           placeholder="e.g. Can we use Redis for caching?"
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 pr-9 text-white text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />
                         <button
                           type="submit"
@@ -2291,7 +2536,7 @@ export default function App() {
                                 fetchSearch();
                               }, 50);
                             }}
-                            className="text-[10px] px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-600 transition truncate max-w-full"
+                            className="text-[10px] px-2 py-1 rounded-lg bg-neutral-950 border border-white/10 text-neutral-300 hover:border-emerald-600 transition truncate max-w-full"
                           >
                             {prompt}
                           </button>
@@ -2303,7 +2548,7 @@ export default function App() {
                     {hierarchySearchResult ? (
                       <div className="space-y-3 pt-2">
                         {/* Step 1: Matched Macro Domain */}
-                        <div className="bg-slate-950 p-3 rounded-xl border border-emerald-800 space-y-1.5">
+                        <div className="bg-neutral-950 p-3 rounded-xl border border-emerald-800 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-emerald-400 text-xs">
                               Level 1: Macro Domain Match
@@ -2315,15 +2560,15 @@ export default function App() {
                           <p className="text-white font-bold text-xs">
                             {hierarchySearchResult.matchedCluster?.name}
                           </p>
-                          <p className="text-slate-300 text-[11px] italic">
+                          <p className="text-neutral-300 text-[11px] italic">
                             "{hierarchySearchResult.matchedCluster?.macroDirective}"
                           </p>
                         </div>
 
                         {/* Step 2: Resolved Child Decisions */}
                         <div className="space-y-1.5">
-                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
-                            <Workflow className="w-3.5 h-3.5 text-indigo-400" />
+                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
+                            <Workflow className="w-3.5 h-3.5 text-white" />
                             Level 2: Resolved Child Decisions
                           </span>
                           <div className="space-y-1.5">
@@ -2332,8 +2577,8 @@ export default function App() {
                                 key={idx}
                                 className={`p-2 rounded-xl border text-[11px] ${
                                   dec.status === 'active'
-                                    ? 'bg-slate-950 border-emerald-900/60 text-slate-200'
-                                    : 'bg-slate-950/70 border-slate-800 text-slate-400 opacity-70'
+                                    ? 'bg-neutral-950 border-emerald-900/60 text-neutral-200'
+                                    : 'bg-black/70 border-white/10 text-neutral-400 opacity-70'
                                 }`}
                               >
                                 <div className="flex items-center justify-between text-[9px] mb-1">
@@ -2341,12 +2586,12 @@ export default function App() {
                                     className={`px-1.5 py-0.5 rounded font-bold uppercase ${
                                       dec.status === 'active'
                                         ? 'bg-emerald-950 text-emerald-300'
-                                        : 'bg-slate-800 text-slate-400'
+                                        : 'bg-neutral-800 text-neutral-400'
                                     }`}
                                   >
                                     {dec.status}
                                   </span>
-                                  <span className="font-mono text-indigo-300">
+                                  <span className="font-mono text-neutral-200">
                                     Score: {Math.round(dec.score * 100)}%
                                   </span>
                                 </div>
@@ -2358,19 +2603,19 @@ export default function App() {
 
                         {/* Step 3: Hierarchical Prompt Grounding Context */}
                         <div className="space-y-1">
-                          <span className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
                             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                             Hierarchical Prompt Context
                           </span>
-                          <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[9px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                          <div className="bg-neutral-950 p-3 rounded-xl border border-white/10 font-mono text-[9px] text-neutral-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
                             {hierarchySearchResult.hierarchicalContext}
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 text-center text-slate-500 space-y-1">
-                        <Boxes className="w-6 h-6 mx-auto text-slate-600" />
-                        <p className="text-[11px] font-medium text-slate-400">No active search</p>
+                      <div className="bg-black/60 p-4 rounded-xl border border-white/10 text-center text-neutral-500 space-y-1">
+                        <Boxes className="w-6 h-6 mx-auto text-neutral-600" />
+                        <p className="text-[11px] font-medium text-neutral-400">No active search</p>
                         <p className="text-[10px]">Type a query or click a quick prompt above to test hierarchical multi-vector resolution.</p>
                       </div>
                     )}
@@ -2383,15 +2628,15 @@ export default function App() {
 
         {/* VIEW 3: ACTIVE REINFORCEMENT & DPO TRAINING DATASET ENGINE */}
         {activeTab === 'training' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+          <div className="flex-1 flex flex-col overflow-hidden bg-neutral-950">
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between flex-wrap gap-3">
+            <div className="p-4 border-b border-white/10 bg-neutral-900/40 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
                   <GraduationCap className="w-4 h-4 text-emerald-400" />
                   Active Reinforcement & DPO Training Pipeline
                 </h2>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-neutral-400">
                   Continuous Memory Calibration: Feedback calibrates authoritative memory weights and exports training pairs for LLM fine-tuning.
                 </p>
               </div>
@@ -2399,10 +2644,10 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleGenerateSynthetic}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold text-xs flex items-center gap-1.5 transition shadow"
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-indigo-900 border border-white/15 text-neutral-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
                   title="Generate synthetic training pairs from stored memories"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <Sparkles className="w-3.5 h-3.5 text-white" />
                   <span>Generate RLHF Sample</span>
                 </button>
 
@@ -2418,71 +2663,71 @@ export default function App() {
                 <a
                   href="/api/training/voyage-pairs.jsonl"
                   download="synapsemem-voyage-pairs.jsonl"
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
+                  className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-slate-700 border border-white/15 text-neutral-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
                 >
-                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                  <Download className="w-3.5 h-3.5 text-neutral-400" />
                   <span>Export Voyage Pairs</span>
                 </a>
               </div>
             </div>
 
             {/* Metrics Row */}
-            <div className="p-4 border-b border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-900/20">
-              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+            <div className="p-4 border-b border-white/10 grid grid-cols-2 md:grid-cols-4 gap-3 bg-neutral-900/20">
+              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
                   <span>Adherence Rate</span>
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
                 <div className="text-xl font-black text-emerald-400">{trainingStats.adherenceRate}%</div>
-                <div className="text-[10px] text-slate-500">Constraint satisfaction ratio</div>
+                <div className="text-[10px] text-neutral-500">Constraint satisfaction ratio</div>
               </div>
 
-              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
                   <span>DPO Pairs Ready</span>
                   <Award className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="text-xl font-black text-white">{trainingStats.dpoPairsCount}</div>
-                <div className="text-[10px] text-slate-500">Chosen vs. Rejected tuples</div>
+                <div className="text-[10px] text-neutral-500">Chosen vs. Rejected tuples</div>
               </div>
 
-              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
                   <span>Calibrated Memories</span>
-                  <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" />
+                  <BrainCircuit className="w-3.5 h-3.5 text-white" />
                 </div>
-                <div className="text-xl font-black text-indigo-300">{trainingStats.calibratedMemoriesCount}</div>
-                <div className="text-[10px] text-slate-500">Weighted by human feedback</div>
+                <div className="text-xl font-black text-neutral-200">{trainingStats.calibratedMemoriesCount}</div>
+                <div className="text-[10px] text-neutral-500">Weighted by human feedback</div>
               </div>
 
-              <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
                   <span>Target Models</span>
                   <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
                 </div>
                 <div className="text-sm font-bold text-cyan-300 truncate">Llama-3 • Gemini • Voyage</div>
-                <div className="text-[10px] text-slate-500">Direct fine-tuning format</div>
+                <div className="text-[10px] text-neutral-500">Direct fine-tuning format</div>
               </div>
             </div>
 
             {/* Live Dataset Table */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
                 <span>Reinforced Training Dataset (Live Feed)</span>
-                <span className="text-[10px] text-slate-500 font-mono">Format: Direct Preference Optimization (DPO)</span>
+                <span className="text-[10px] text-neutral-500 font-mono">Format: Direct Preference Optimization (DPO)</span>
               </div>
 
               {feedbackList.length === 0 ? (
-                <div className="text-center py-20 text-slate-500 space-y-3">
-                  <GraduationCap className="w-10 h-10 mx-auto text-slate-600" />
-                  <p className="text-xs font-semibold text-slate-300">No reinforcement data recorded yet.</p>
-                  <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                <div className="text-center py-20 text-neutral-500 space-y-3">
+                  <GraduationCap className="w-10 h-10 mx-auto text-neutral-600" />
+                  <p className="text-xs font-semibold text-neutral-300">No reinforcement data recorded yet.</p>
+                  <p className="text-[11px] text-neutral-500 max-w-md mx-auto">
                     Click 👍 (Good) or 👎 (Bad) on any assistant answer in Chatbot to record reinforcement, or click "Generate RLHF Sample" above.
                   </p>
                 </div>
               ) : (
                 feedbackList.map((item, idx) => (
-                  <div key={item._id || idx} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+                  <div key={item._id || idx} className="p-3.5 rounded-xl bg-neutral-900/80 border border-white/10 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
@@ -2493,17 +2738,17 @@ export default function App() {
                           {item.rating === 1 ? <ThumbsUp className="w-3 h-3" /> : <ThumbsDown className="w-3 h-3" />}
                           {item.rating === 1 ? 'Adhered to Memory' : 'Constraint Violated'}
                         </span>
-                        <span className="text-[10px] text-slate-500 font-mono">
+                        <span className="text-[10px] text-neutral-500 font-mono">
                           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[10px] text-neutral-400 font-mono">
                         Workspace: {item.workspaceId || 'ws_core'}
                       </span>
                     </div>
 
-                    <div className="text-xs font-semibold text-slate-200">
-                      <span className="text-indigo-400 font-bold mr-1.5">Prompt:</span>
+                    <div className="text-xs font-semibold text-neutral-200">
+                      <span className="text-white font-bold mr-1.5">Prompt:</span>
                       "{item.query}"
                     </div>
 
@@ -2512,14 +2757,14 @@ export default function App() {
                         <div className="text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Chosen (Memory Grounded)
                         </div>
-                        <p className="text-slate-300 leading-relaxed">{item.chosenAnswer}</p>
+                        <p className="text-neutral-300 leading-relaxed">{item.chosenAnswer}</p>
                       </div>
 
                       <div className="p-2.5 rounded-lg bg-rose-950/20 border border-rose-900/50 space-y-1">
                         <div className="text-[10px] font-bold text-rose-400 uppercase flex items-center gap-1">
                           <X className="w-3 h-3" /> Rejected (Baseline Hallucination)
                         </div>
-                        <p className="text-slate-400 leading-relaxed italic">{item.rejectedAnswer}</p>
+                        <p className="text-neutral-400 leading-relaxed italic">{item.rejectedAnswer}</p>
                       </div>
                     </div>
                   </div>
@@ -2531,15 +2776,15 @@ export default function App() {
 
         {/* VIEW 4: MULTI-AGENT CONSENSUS & QUORUM MEMORY VALIDATION */}
         {activeTab === 'consensus' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+          <div className="flex-1 flex flex-col overflow-hidden bg-neutral-950">
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between flex-wrap gap-3">
+            <div className="p-4 border-b border-white/10 bg-neutral-900/40 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
                   <Vote className="w-4 h-4 text-purple-400" />
                   Multi-Agent Consensus & Quorum Memory Validation
                 </h2>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-neutral-400">
                   Autonomous Multi-Agent Governance: High-impact memory mutations require ≥67% quorum consensus across specialized agent personas before writing to MongoDB Atlas.
                 </p>
               </div>
@@ -2564,7 +2809,7 @@ export default function App() {
             {/* Main Content Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Interactive Simulation Sandbox */}
-              <div className="bg-slate-900/70 border border-purple-900/40 rounded-2xl p-4 space-y-3.5">
+              <div className="bg-neutral-900/70 border border-purple-900/40 rounded-2xl p-4 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-lg bg-purple-950 border border-purple-800 text-purple-300">
@@ -2572,10 +2817,10 @@ export default function App() {
                     </div>
                     <div>
                       <h3 className="text-xs font-bold text-white">Simulate Multi-Agent Quorum Evaluation</h3>
-                      <p className="text-[10px] text-slate-400">Propose any decision to trigger live voting from Atlas Architect, Sentinel Guard, and Pipeline Marshal.</p>
+                      <p className="text-[10px] text-neutral-400">Propose any decision to trigger live voting from Atlas Architect, Sentinel Guard, and Pipeline Marshal.</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-950 border border-white/10 text-neutral-300">
                     3 Specialized Evaluator Personas
                   </span>
                 </div>
@@ -2587,7 +2832,7 @@ export default function App() {
                       value={consensusProposalText}
                       onChange={(e) => setConsensusProposalText(e.target.value)}
                       placeholder="e.g. Deploy immediately to production now, bypass freeze window."
-                      className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      className="flex-1 bg-neutral-950 border border-white/15 rounded-xl px-3.5 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
                     />
                     <button
                       type="submit"
@@ -2614,7 +2859,7 @@ export default function App() {
                           setConsensusProposalText(preset.text);
                           handleEvaluateConsensus(null, preset.text);
                         }}
-                        className="text-[10px] px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-purple-600 text-slate-300 transition"
+                        className="text-[10px] px-2.5 py-1 rounded-lg bg-neutral-950 border border-white/10 hover:border-purple-600 text-neutral-300 transition"
                       >
                         {preset.label}
                       </button>
@@ -2624,9 +2869,9 @@ export default function App() {
 
                 {/* Active Evaluated Proposal Live Ballots */}
                 {activeEvaluatedProposal && (
-                  <div className="pt-2 border-t border-slate-800/80 space-y-3">
+                  <div className="pt-2 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="text-xs font-semibold text-slate-200">
+                      <div className="text-xs font-semibold text-neutral-200">
                         <span className="text-purple-400 font-bold mr-1.5">Evaluated Directive:</span>
                         "{activeEvaluatedProposal.statement}"
                       </div>
@@ -2639,7 +2884,7 @@ export default function App() {
                           {activeEvaluatedProposal.quorumReached ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
                           {activeEvaluatedProposal.quorumReached ? 'RATIFIED (Quorum Reached)' : 'BLOCKED / VETOED'}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400">
+                        <span className="text-[10px] font-mono text-neutral-400">
                           {activeEvaluatedProposal.approvalCount} of {activeEvaluatedProposal.totalVoters} Votes ({Math.round(activeEvaluatedProposal.approvalRate * 100)}%)
                         </span>
                       </div>
@@ -2657,8 +2902,8 @@ export default function App() {
                               isVeto
                                 ? 'bg-rose-950/30 border-rose-800 shadow-md shadow-rose-950/20'
                                 : isApprove
-                                ? 'bg-slate-950/90 border-emerald-900/60'
-                                : 'bg-slate-950/80 border-amber-900/50'
+                                ? 'bg-black/80 border-emerald-900/60'
+                                : 'bg-black/80 border-amber-900/50'
                             }`}
                           >
                             <div>
@@ -2679,12 +2924,12 @@ export default function App() {
                                   {isVeto ? 'CRITICAL VETO' : vote.vote}
                                 </span>
                               </div>
-                              <span className="text-[9px] text-slate-400 font-mono block mb-1.5">{vote.role}</span>
-                              <p className="text-[11px] text-slate-300 leading-relaxed italic">
+                              <span className="text-[9px] text-neutral-400 font-mono block mb-1.5">{vote.role}</span>
+                              <p className="text-[11px] text-neutral-300 leading-relaxed italic">
                                 "{vote.rationale}"
                               </p>
                             </div>
-                            <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
                               <span>Confidence: {Math.round(vote.confidence * 100)}%</span>
                               <span>Signed Ballot</span>
                             </div>
@@ -2699,19 +2944,19 @@ export default function App() {
               {/* Proposals Registry Log */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Vote className="w-4 h-4 text-purple-400" />
                     Consensus Proposal Registry
                   </div>
 
                   {/* Filter chips */}
-                  <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                  <div className="flex bg-neutral-950 p-1 rounded-xl border border-white/10 text-xs">
                     {['all', 'ratified', 'rejected'].map((f) => (
                       <button
                         key={f}
                         onClick={() => setConsensusFilter(f)}
                         className={`px-3 py-1 rounded-lg font-medium capitalize transition ${
-                          consensusFilter === f ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                          consensusFilter === f ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-neutral-200'
                         }`}
                       >
                         {f === 'rejected' ? 'Rejected / Vetoed' : f}
@@ -2733,8 +2978,8 @@ export default function App() {
                         onClick={() => setActiveEvaluatedProposal(item)}
                         className={`p-3.5 rounded-xl border cursor-pointer transition space-y-2 ${
                           item.status === 'ratified'
-                            ? 'bg-slate-900/70 border-slate-800 hover:border-emerald-800'
-                            : 'bg-slate-900/50 border-rose-950/80 hover:border-rose-800'
+                            ? 'bg-neutral-900/70 border-white/10 hover:border-emerald-800'
+                            : 'bg-neutral-900/50 border-rose-950/80 hover:border-rose-800'
                         }`}
                       >
                         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -2749,16 +2994,16 @@ export default function App() {
                               {item.status === 'ratified' ? <CheckCircle2 className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
                               {item.status === 'ratified' ? 'Ratified into Memory' : 'Vetoed / Blocked'}
                             </span>
-                            <span className="text-[10px] font-mono text-slate-400">
+                            <span className="text-[10px] font-mono text-neutral-400">
                               Quorum: {item.approvalCount || (item.votes?.filter(v => v.vote === 'approve').length || 0)}/{item.totalVoters || 3} Votes
                             </span>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-500">
+                          <span className="text-[10px] font-mono text-neutral-500">
                             {new Date(item.evaluatedAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
 
-                        <p className="text-xs font-semibold text-slate-100">
+                        <p className="text-xs font-semibold text-white">
                           {item.statement}
                         </p>
 
@@ -2780,28 +3025,28 @@ export default function App() {
 
         {/* SIDEBAR: INSPECT PANEL */}
         {inspectOpen && (
-          <aside className="w-96 border-l border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-hidden shadow-2xl">
-            <div className="p-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+          <aside className="w-96 border-l border-white/10 bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-2xl">
+            <div className="p-3.5 border-b border-white/10 flex items-center justify-between bg-neutral-900/60">
               <div className="flex items-center gap-2">
-                <ScanEye className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Inspect Retrieval</span>
+                <ScanEye className="w-4 h-4 text-white" />
+                <span className="text-xs font-bold text-neutral-200 uppercase tracking-wider">Inspect Retrieval</span>
               </div>
-              <button onClick={() => setInspectOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setInspectOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
               {!activeInspection ? (
-                <div className="text-center py-20 text-slate-500 space-y-2">
-                  <ScanEye className="w-8 h-8 mx-auto text-slate-600" />
-                  <p className="font-semibold text-slate-400">No Query Inspected Yet</p>
-                  <p className="text-[11px] text-slate-500">Ask any question in #ask-assistant to inspect real $vectorSearch scores.</p>
+                <div className="text-center py-20 text-neutral-500 space-y-2">
+                  <ScanEye className="w-8 h-8 mx-auto text-neutral-600" />
+                  <p className="font-semibold text-neutral-400">No Query Inspected Yet</p>
+                  <p className="text-[11px] text-neutral-500">Ask any question in #ask-assistant to inspect real $vectorSearch scores.</p>
                 </div>
               ) : (
                 <>
-                  <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Query Evaluated</div>
+                  <div className="bg-neutral-900 p-3 rounded-xl border border-white/10 space-y-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Query Evaluated</div>
                     <div className="text-xs font-semibold text-white">"{activeInspection.query}"</div>
                     <div className="text-[10px] text-emerald-400 font-mono mt-1">Index: {activeInspection.vectorIndex} (1024D)</div>
                   </div>
@@ -2814,14 +3059,14 @@ export default function App() {
                       </span>
                     </div>
                     {activeInspection.selectedMemories?.map((m) => (
-                      <div key={m.id} className="p-3 rounded-xl bg-slate-900 border border-emerald-900/60 space-y-1.5">
+                      <div key={m.id} className="p-3 rounded-xl bg-neutral-900 border border-emerald-900/60 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-white">{m.topic}: {m.statement}</span>
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
                             USED
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                        <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-1">
                           <span>Similarity Score:</span>
                           <span className="font-mono text-emerald-400 font-bold">{Math.round((m.score || 0.8) * 100)}% Match</span>
                         </div>
@@ -2838,16 +3083,16 @@ export default function App() {
                         </span>
                       </div>
                       {activeInspection.rejectedMemories.map((r, i) => (
-                        <div key={i} className="p-2.5 rounded-xl bg-slate-900/80 border border-amber-900/40 text-[11px] space-y-1">
-                          <div className="font-semibold text-slate-300">{r.topic}</div>
+                        <div key={i} className="p-2.5 rounded-xl bg-neutral-900/80 border border-amber-900/40 text-[11px] space-y-1">
+                          <div className="font-semibold text-neutral-300">{r.topic}</div>
                           <div className="text-[10px] text-rose-300 font-mono">Reason: {r.reason}</div>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-[10px] font-mono text-slate-400 space-y-1">
-                    <div className="font-bold text-slate-300">Prompt Proof:</div>
+                  <div className="bg-neutral-900/80 p-3 rounded-xl border border-white/10 text-[10px] font-mono text-neutral-400 space-y-1">
+                    <div className="font-bold text-neutral-300">Prompt Proof:</div>
                     <div>Chat history injected: <span className="text-emerald-400 font-bold">false</span></div>
                     <div>Memory IDs injected: {activeInspection.promptPayload?.memory_records_injected?.join(', ') || 'none'}</div>
                   </div>
@@ -2861,26 +3106,26 @@ export default function App() {
       {/* MODAL: TIME MACHINE SIMULATOR */}
       {timeMachineOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+          <div className="bg-neutral-900 border border-white/15 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <History className="w-4 h-4 text-amber-400" /> Time Machine Simulator
               </h3>
-              <button onClick={() => setTimeMachineOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setTimeMachineOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-slate-400 text-xs">Advance application time to verify how temporary assumptions automatically expire.</p>
+            <p className="text-neutral-400 text-xs">Advance application time to verify how temporary assumptions automatically expire.</p>
 
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-[11px]">
+            <div className="p-3 bg-neutral-950 rounded-xl border border-white/10 space-y-2 text-[11px]">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Current App Date:</span>
+                <span className="text-neutral-400">Current App Date:</span>
                 <span className="font-bold text-amber-300 font-mono">
                   {new Date(simulatedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Deployment Freeze:</span>
+                <span className="text-neutral-400">Deployment Freeze:</span>
                 <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
                   new Date(simulatedTime) > new Date('2026-11-05T18:00:00.000Z')
                     ? 'bg-rose-950 text-rose-300 border border-rose-800'
@@ -2894,17 +3139,17 @@ export default function App() {
             <div className="space-y-2 text-xs">
               <button
                 onClick={() => handleTimeTravel(0)}
-                className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-left flex items-center justify-between font-medium"
+                className="w-full py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-slate-700 text-neutral-200 text-left flex items-center justify-between font-medium"
               >
                 <div>
                   <div className="font-semibold">Reset to Oct 30, 2026</div>
-                  <div className="text-[10px] text-slate-400">Active sprint period (freeze active)</div>
+                  <div className="text-[10px] text-neutral-400">Active sprint period (freeze active)</div>
                 </div>
-                <span className="text-indigo-400 font-bold">Reset</span>
+                <span className="text-white font-bold">Reset</span>
               </button>
               <button
                 onClick={() => handleTimeTravel(7)}
-                className="w-full py-2.5 px-3 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-left flex items-center justify-between font-bold"
+                className="w-full py-2.5 px-3 rounded-xl bg-white/10 hover:bg-indigo-900 border border-white/15 text-neutral-200 text-left flex items-center justify-between font-bold"
               >
                 <div>
                   <div className="font-semibold">Fast-Forward +7 Days (Nov 6, 2026)</div>
@@ -2920,59 +3165,59 @@ export default function App() {
       {/* MODAL: ADD / EDIT MEMORY */}
       {addModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+          <div className="bg-neutral-900 border border-white/15 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-indigo-400" /> {editMemory ? 'Edit Decision' : 'Add Decision to MongoDB'}
+                <Edit2 className="w-4 h-4 text-white" /> {editMemory ? 'Edit Decision' : 'Add Decision to MongoDB'}
               </h3>
-              <button onClick={() => setAddModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setAddModalOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSaveMemory} className="space-y-3.5">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Topic / Category</label>
+                <label className="block text-neutral-300 font-semibold mb-1">Topic / Category</label>
                 <input
                   type="text"
                   required
                   value={formTopic}
                   onChange={(e) => setFormTopic(e.target.value)}
                   placeholder="e.g. Database, Infrastructure, Frontend"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Decision / Statement</label>
+                <label className="block text-neutral-300 font-semibold mb-1">Decision / Statement</label>
                 <textarea
                   rows="2"
                   required
                   value={formDecision}
                   onChange={(e) => setFormDecision(e.target.value)}
                   placeholder="e.g. We use MongoDB Atlas as our primary database."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Reason / Rationale</label>
+                <label className="block text-neutral-300 font-semibold mb-1">Reason / Rationale</label>
                 <input
                   type="text"
                   value={formReason}
                   onChange={(e) => setFormReason(e.target.value)}
                   placeholder="e.g. Flexible document structure and vector search capability"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Status</label>
+                  <label className="block text-neutral-300 font-semibold mb-1">Status</label>
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="active">Active</option>
                     <option value="superseded">Superseded</option>
@@ -2980,27 +3225,27 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Valid Until (Expiry)</label>
+                  <label className="block text-neutral-300 font-semibold mb-1">Valid Until (Expiry)</label>
                   <input
                     type="datetime-local"
                     value={formValidUntil}
                     onChange={(e) => setFormValidUntil(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setAddModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium"
+                  className="px-4 py-2 rounded-xl bg-neutral-800 text-neutral-300 font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                  className="px-4 py-2 rounded-xl bg-white text-black hover:bg-neutral-200 text-white font-semibold"
                 >
                   Save Decision
                 </button>
@@ -3013,28 +3258,28 @@ export default function App() {
       {/* MODAL: LINK KNOWLEDGE GRAPH LINEAGE */}
       {linkModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
+          <div className="bg-neutral-900 border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-purple-400" /> Connect Knowledge Graph Lineage
               </h3>
-              <button onClick={() => setLinkModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setLinkModalOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-neutral-400">
               Establish a directed relationship edge between two authoritative memories to enable multi-hop GraphRAG traversal in MongoDB Atlas.
             </p>
 
             <form onSubmit={handleSaveLink} className="space-y-3.5">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Source Memory (Origin)</label>
+                <label className="block text-neutral-300 font-semibold mb-1">Source Memory (Origin)</label>
                 <select
                   value={linkSource}
                   onChange={(e) => setLinkSource(e.target.value)}
                   required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
                 >
                   <option value="">Select origin memory...</option>
                   {memories.map((m) => (
@@ -3047,7 +3292,7 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Relationship Type</label>
+                  <label className="block text-neutral-300 font-semibold mb-1">Relationship Type</label>
                   <select
                     value={linkType}
                     onChange={(e) => {
@@ -3059,7 +3304,7 @@ export default function App() {
                         else if (e.target.value === 'constrains') setLinkLabel('Freeze constraint');
                       }
                     }}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                    className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
                   >
                     <option value="depends_on">Depends On (Dependency)</option>
                     <option value="caching_layer">Caching Layer (Integration)</option>
@@ -3069,24 +3314,24 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Edge Label</label>
+                  <label className="block text-neutral-300 font-semibold mb-1">Edge Label</label>
                   <input
                     type="text"
                     value={linkLabel}
                     onChange={(e) => setLinkLabel(e.target.value)}
                     placeholder="e.g. Caching layer"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Target Memory (Destination)</label>
+                <label className="block text-neutral-300 font-semibold mb-1">Target Memory (Destination)</label>
                 <select
                   value={linkTarget}
                   onChange={(e) => setLinkTarget(e.target.value)}
                   required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
                 >
                   <option value="">Select target memory...</option>
                   {memories
@@ -3099,11 +3344,11 @@ export default function App() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setLinkModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium"
+                  className="px-4 py-2 rounded-xl bg-neutral-800 text-neutral-300 font-medium"
                 >
                   Cancel
                 </button>
@@ -3122,29 +3367,29 @@ export default function App() {
       {/* MODAL: LIVE LLM CONFIGURATION (GEMINI & CLAUDE) */}
       {llmModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-indigo-700/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+          <div className="bg-neutral-900 border border-white/15/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Key className="w-4 h-4 text-indigo-400" /> Live LLM Grounding Configuration
+                <Key className="w-4 h-4 text-white" /> Live LLM Grounding Configuration
               </h3>
-              <button onClick={() => setLlmModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setLlmModalOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
               Power live streaming answers with real Google Gemini or Anthropic Claude API keys. All responses are strictly grounded on MongoDB Atlas 1024D vectors with zero chat history injected.
             </p>
 
             <form onSubmit={handleSaveLlmKeys} className="space-y-3.5">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-slate-200 font-semibold flex items-center gap-1.5">
+                  <label className="text-neutral-200 font-semibold flex items-center gap-1.5">
                     <span className="text-sm">⚡</span> Google Gemini API Key
                   </label>
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                      activeKeys.hasGeminiKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      activeKeys.hasGeminiKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-neutral-950 text-neutral-400 border border-white/10'
                     }`}>
                       {activeKeys.hasGeminiKey ? 'Active Key Set' : 'Fallback / Unset'}
                     </span>
@@ -3152,7 +3397,7 @@ export default function App() {
                       type="button"
                       disabled={testingKey.status === 'loading'}
                       onClick={() => handleTestLlmKey('gemini')}
-                      className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition-colors"
+                      className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-neutral-200 border border-white/15 transition-colors"
                     >
                       {testingKey.provider === 'gemini' && testingKey.status === 'loading' ? 'Testing...' : 'Test Connection'}
                     </button>
@@ -3163,13 +3408,13 @@ export default function App() {
                   value={geminiKeyInput}
                   onChange={(e) => setGeminiKeyInput(e.target.value)}
                   placeholder="AIzaSy..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 {testingKey.provider === 'gemini' && testingKey.message && (
                   <p className={`text-[10px] font-mono px-2 py-1 rounded border ${
                     testingKey.status === 'success' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80' :
                     testingKey.status === 'error' ? 'bg-rose-950/60 text-rose-300 border-rose-800/80' :
-                    'bg-slate-950 text-slate-400 border-slate-800'
+                    'bg-neutral-950 text-neutral-400 border-white/10'
                   }`}>
                     {testingKey.message}
                   </p>
@@ -3178,12 +3423,12 @@ export default function App() {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-slate-200 font-semibold flex items-center gap-1.5">
+                  <label className="text-neutral-200 font-semibold flex items-center gap-1.5">
                     <span className="text-sm">🔮</span> Anthropic Claude API Key
                   </label>
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                      activeKeys.hasClaudeKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      activeKeys.hasClaudeKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-neutral-950 text-neutral-400 border border-white/10'
                     }`}>
                       {activeKeys.hasClaudeKey ? 'Active Key Set' : 'Fallback / Unset'}
                     </span>
@@ -3191,7 +3436,7 @@ export default function App() {
                       type="button"
                       disabled={testingKey.status === 'loading'}
                       onClick={() => handleTestLlmKey('claude')}
-                      className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition-colors"
+                      className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-neutral-200 border border-white/15 transition-colors"
                     >
                       {testingKey.provider === 'claude' && testingKey.status === 'loading' ? 'Testing...' : 'Test Connection'}
                     </button>
@@ -3202,34 +3447,34 @@ export default function App() {
                   value={claudeKeyInput}
                   onChange={(e) => setClaudeKeyInput(e.target.value)}
                   placeholder="sk-ant-api..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 {testingKey.provider === 'claude' && testingKey.message && (
                   <p className={`text-[10px] font-mono px-2 py-1 rounded border ${
                     testingKey.status === 'success' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80' :
                     testingKey.status === 'error' ? 'bg-rose-950/60 text-rose-300 border-rose-800/80' :
-                    'bg-slate-950 text-slate-400 border-slate-800'
+                    'bg-neutral-950 text-neutral-400 border-white/10'
                   }`}>
                     {testingKey.message}
                   </p>
                 )}
               </div>
 
-              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-slate-400 leading-relaxed">
-                💡 <strong className="text-slate-300">Resilient Zero-Breakage Design:</strong> When keys are empty, SynapseMem seamlessly uses the local deterministic Atlas vector grounding engine.
+              <div className="p-2.5 rounded-xl bg-neutral-950 border border-white/10 text-[10px] text-neutral-400 leading-relaxed">
+                💡 <strong className="text-neutral-300">Resilient Zero-Breakage Design:</strong> When keys are empty, SynapseMem seamlessly uses the local deterministic Atlas vector grounding engine.
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setLlmModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium"
+                  className="px-4 py-2 rounded-xl bg-neutral-800 text-neutral-300 font-medium"
                 >
                   Close
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1.5 shadow"
+                  className="px-4 py-2 rounded-xl bg-white text-black hover:bg-neutral-200 text-white font-semibold flex items-center gap-1.5 shadow"
                 >
                   <Key className="w-3.5 h-3.5" /> Save API Keys
                 </button>
@@ -3242,9 +3487,9 @@ export default function App() {
       {/* MODAL: LIVE EMPIRICAL BENCHMARK & EVALUATION MATRIX */}
       {benchmarkModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-purple-700/80 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-xs">
+          <div className="bg-neutral-900 border border-purple-700/80 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-xs">
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+            <div className="p-4 border-b border-white/10 bg-neutral-950 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-purple-600/30 border border-purple-500 flex items-center justify-center">
                   <BarChart2 className="w-4 h-4 text-purple-300" />
@@ -3256,7 +3501,7 @@ export default function App() {
                       Live Benchmark
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-neutral-400">
                     Scientific comparison vs Naive Top-K Flat RAG and Standard History-Bloat Agents across 5 adversarial test vectors.
                   </p>
                 </div>
@@ -3281,7 +3526,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setBenchmarkModalOpen(false)}
-                  className="text-slate-400 hover:text-white p-1"
+                  className="text-neutral-400 hover:text-white p-1"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -3289,7 +3534,7 @@ export default function App() {
             </div>
 
             {/* Body */}
-            <div className="p-5 overflow-y-auto space-y-5 flex-1 bg-slate-950">
+            <div className="p-5 overflow-y-auto space-y-5 flex-1 bg-neutral-950">
               {benchmarkData?.scorecard ? (
                 <>
                   {/* Top 3 Scorecards */}
@@ -3306,79 +3551,79 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Hallucination Rate:</span>
+                          <span className="text-neutral-400 block text-[10px]">Hallucination Rate:</span>
                           <span className="font-bold text-emerald-400">{benchmarkData.scorecard.synapseMem.hallucinationRate}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Token Savings:</span>
+                          <span className="text-neutral-400 block text-[10px]">Token Savings:</span>
                           <span className="font-bold text-emerald-400">{benchmarkData.scorecard.synapseMem.tokenEfficiency}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Avg Latency:</span>
+                          <span className="text-neutral-400 block text-[10px]">Avg Latency:</span>
                           <span className="font-bold text-purple-300">{benchmarkData.scorecard.synapseMem.avgLatencyMs}ms</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Tokens / Query:</span>
-                          <span className="font-bold text-slate-200">{benchmarkData.scorecard.synapseMem.avgTokensPerRecall} tokens</span>
+                          <span className="text-neutral-400 block text-[10px]">Tokens / Query:</span>
+                          <span className="font-bold text-neutral-200">{benchmarkData.scorecard.synapseMem.avgTokensPerRecall} tokens</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Naive Flat RAG */}
-                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow space-y-2">
+                    <div className="p-4 rounded-xl bg-neutral-900 border border-white/10 shadow space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                          <Layers className="w-4 h-4 text-slate-400" /> Naive Flat RAG (Top-K)
+                        <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                          <Layers className="w-4 h-4 text-neutral-400" /> Naive Flat RAG (Top-K)
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-bold text-[10px]">
+                        <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-bold text-[10px]">
                           Score: {benchmarkData.scorecard.naiveFlatRag.score}%
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Hallucination Rate:</span>
+                          <span className="text-neutral-400 block text-[10px]">Hallucination Rate:</span>
                           <span className="font-bold text-rose-400">{benchmarkData.scorecard.naiveFlatRag.hallucinationRate}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Token Savings:</span>
-                          <span className="font-bold text-slate-400">{benchmarkData.scorecard.naiveFlatRag.tokenEfficiency}</span>
+                          <span className="text-neutral-400 block text-[10px]">Token Savings:</span>
+                          <span className="font-bold text-neutral-400">{benchmarkData.scorecard.naiveFlatRag.tokenEfficiency}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Avg Latency:</span>
-                          <span className="font-bold text-slate-300">{benchmarkData.scorecard.naiveFlatRag.avgLatencyMs}ms</span>
+                          <span className="text-neutral-400 block text-[10px]">Avg Latency:</span>
+                          <span className="font-bold text-neutral-300">{benchmarkData.scorecard.naiveFlatRag.avgLatencyMs}ms</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Tokens / Query:</span>
-                          <span className="font-bold text-slate-300">{benchmarkData.scorecard.naiveFlatRag.avgTokensPerRecall} tokens</span>
+                          <span className="text-neutral-400 block text-[10px]">Tokens / Query:</span>
+                          <span className="font-bold text-neutral-300">{benchmarkData.scorecard.naiveFlatRag.avgTokensPerRecall} tokens</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Chat History Bloat */}
-                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow space-y-2">
+                    <div className="p-4 rounded-xl bg-neutral-900 border border-white/10 shadow space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                          <Bot className="w-4 h-4 text-slate-400" /> History-Bloat (Mem0/LangChain)
+                        <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                          <Bot className="w-4 h-4 text-neutral-400" /> History-Bloat (Mem0/LangChain)
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-bold text-[10px]">
+                        <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-bold text-[10px]">
                           Score: {benchmarkData.scorecard.chatHistoryBloat.score}%
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Hallucination Rate:</span>
+                          <span className="text-neutral-400 block text-[10px]">Hallucination Rate:</span>
                           <span className="font-bold text-rose-400">{benchmarkData.scorecard.chatHistoryBloat.hallucinationRate}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Token Bloat:</span>
+                          <span className="text-neutral-400 block text-[10px]">Token Bloat:</span>
                           <span className="font-bold text-rose-400">{benchmarkData.scorecard.chatHistoryBloat.tokenEfficiency}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Avg Latency:</span>
-                          <span className="font-bold text-slate-400">{benchmarkData.scorecard.chatHistoryBloat.avgLatencyMs}ms</span>
+                          <span className="text-neutral-400 block text-[10px]">Avg Latency:</span>
+                          <span className="font-bold text-neutral-400">{benchmarkData.scorecard.chatHistoryBloat.avgLatencyMs}ms</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Tokens / Query:</span>
+                          <span className="text-neutral-400 block text-[10px]">Tokens / Query:</span>
                           <span className="font-bold text-rose-300">{benchmarkData.scorecard.chatHistoryBloat.avgTokensPerRecall} tokens</span>
                         </div>
                       </div>
@@ -3386,22 +3631,22 @@ export default function App() {
                   </div>
 
                   {/* Radar Metric Progress Bars */}
-                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-                    <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                  <div className="p-4 rounded-xl bg-neutral-900 border border-white/10 space-y-3">
+                    <h4 className="text-xs font-bold text-neutral-200 flex items-center gap-2">
                       <Scale className="w-4 h-4 text-purple-400" /> Architectural Radar Dimensions (Higher is Better)
                     </h4>
                     <div className="space-y-2.5">
                       {benchmarkData.radarMetrics?.map((m, idx) => (
                         <div key={idx} className="space-y-1">
-                          <div className="flex justify-between text-[11px] font-semibold text-slate-300">
+                          <div className="flex justify-between text-[11px] font-semibold text-neutral-300">
                             <span>{m.metric}</span>
                             <div className="flex gap-3 text-[10px] font-mono">
                               <span className="text-purple-300 font-bold">Synapse: {m.synapseMem}%</span>
-                              <span className="text-slate-400">Naive: {m.naiveRag}%</span>
-                              <span className="text-slate-500">Bloat: {m.historyBloat}%</span>
+                              <span className="text-neutral-400">Naive: {m.naiveRag}%</span>
+                              <span className="text-neutral-500">Bloat: {m.historyBloat}%</span>
                             </div>
                           </div>
-                          <div className="w-full h-2 rounded-full bg-slate-950 flex overflow-hidden">
+                          <div className="w-full h-2 rounded-full bg-neutral-950 flex overflow-hidden">
                             <div style={{ width: `${m.synapseMem}%` }} className="bg-purple-500 h-full transition-all duration-500" />
                           </div>
                         </div>
@@ -3411,21 +3656,21 @@ export default function App() {
 
                   {/* 5 Adversarial Scenarios Breakdown */}
                   {benchmarkData.detailedTests?.length > 0 && (
-                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-                      <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <div className="p-4 rounded-xl bg-neutral-900 border border-white/10 space-y-3">
+                      <h4 className="text-xs font-bold text-neutral-200 flex items-center gap-2">
                         <ShieldAlert className="w-4 h-4 text-purple-400" /> Adversarial Test Case Execution Breakdown
                       </h4>
                       <div className="space-y-2 text-[11px]">
                         {benchmarkData.detailedTests.map((t, idx) => (
-                          <div key={idx} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 flex items-start justify-between gap-3">
+                          <div key={idx} className="p-2.5 rounded-lg bg-neutral-950 border border-white/10 flex items-start justify-between gap-3">
                             <div>
-                              <div className="font-bold text-slate-200 flex items-center gap-2">
+                              <div className="font-bold text-neutral-200 flex items-center gap-2">
                                 <span>{idx + 1}. {t.name}</span>
                                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800">
                                   {t.category}
                                 </span>
                               </div>
-                              <p className="text-[10px] text-slate-400 mt-0.5">Query: "{t.query}"</p>
+                              <p className="text-[10px] text-neutral-400 mt-0.5">Query: "{t.query}"</p>
                               <p className="text-[10px] text-rose-300/80 mt-1">
                                 ⚠️ Naive RAG Failure Mode: {t.naiveFlatRag?.failureReason}
                               </p>
@@ -3440,7 +3685,7 @@ export default function App() {
                   )}
                 </>
               ) : (
-                <div className="p-8 text-center text-slate-400 space-y-3">
+                <div className="p-8 text-center text-neutral-400 space-y-3">
                   <BarChart2 className="w-8 h-8 text-purple-400 mx-auto animate-pulse" />
                   <p>Loading benchmark scorecard...</p>
                 </div>
@@ -3448,11 +3693,11 @@ export default function App() {
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-[11px] text-slate-400">
+            <div className="p-3 border-t border-white/10 bg-neutral-950 flex items-center justify-between text-[11px] text-neutral-400">
               <span>Verified with Voyage AI 1024D Embeddings & MongoDB Atlas $vectorSearch</span>
               <button
                 onClick={() => setBenchmarkModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                className="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-slate-700 text-neutral-200 font-semibold"
               >
                 Close
               </button>
@@ -3464,39 +3709,39 @@ export default function App() {
       {/* DRAWER: REAL-TIME CHANGE STREAM & MULTI-AGENT SYNC */}
       {realtimeDrawerOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
-          <div className="w-full max-w-md bg-slate-900 border-l border-emerald-800/80 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200 text-xs">
+          <div className="w-full max-w-md bg-neutral-900 border-l border-emerald-800/80 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200 text-xs">
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+            <div className="p-4 border-b border-white/10 bg-neutral-950 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <Radio className="w-4 h-4 text-emerald-400" /> Real-Time Change Stream
                 </h3>
               </div>
-              <button onClick={() => setRealtimeDrawerOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setRealtimeDrawerOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Stats Bar */}
-            <div className="p-3.5 bg-slate-950/90 border-b border-slate-800 grid grid-cols-3 gap-2 text-center text-[11px]">
-              <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Total Events</span>
+            <div className="p-3.5 bg-black/80 border-b border-white/10 grid grid-cols-3 gap-2 text-center text-[11px]">
+              <div className="p-2 rounded-lg bg-neutral-900 border border-white/10">
+                <span className="text-[10px] text-neutral-400 block">Total Events</span>
                 <span className="font-bold text-emerald-400 text-sm">{realtimeHistory.length}</span>
               </div>
-              <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Avg Latency</span>
+              <div className="p-2 rounded-lg bg-neutral-900 border border-white/10">
+                <span className="text-[10px] text-neutral-400 block">Avg Latency</span>
                 <span className="font-bold text-purple-300 text-sm">&lt;8ms</span>
               </div>
-              <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Sync Protocol</span>
+              <div className="p-2 rounded-lg bg-neutral-900 border border-white/10">
+                <span className="text-[10px] text-neutral-400 block">Sync Protocol</span>
                 <span className="font-bold text-blue-300 text-sm">SSE / Watch</span>
               </div>
             </div>
 
             {/* Action Bar */}
-            <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400">Pushes mutations across agents in real time</span>
+            <div className="p-3 bg-neutral-950 border-b border-white/10 flex items-center justify-between">
+              <span className="text-[10px] text-neutral-400">Pushes mutations across agents in real time</span>
               <button
                 onClick={handleBroadcastTestSync}
                 className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1.5 shadow transition"
@@ -3506,9 +3751,9 @@ export default function App() {
             </div>
 
             {/* Event Feed */}
-            <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 bg-slate-950">
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 bg-neutral-950">
               {realtimeHistory.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">
+                <div className="p-8 text-center text-neutral-500">
                   <Radio className="w-8 h-8 text-emerald-500/40 mx-auto animate-pulse mb-2" />
                   <p>Listening for MongoDB Change Stream mutations...</p>
                 </div>
@@ -3516,7 +3761,7 @@ export default function App() {
                 realtimeHistory.map((evt, idx) => (
                   <div
                     key={evt.id || idx}
-                    className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5 hover:border-emerald-600/50 transition shadow"
+                    className="p-3 rounded-xl bg-neutral-900/90 border border-white/10 space-y-1.5 hover:border-emerald-600/50 transition shadow"
                   >
                     <div className="flex items-center justify-between">
                       <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded font-mono ${
@@ -3527,15 +3772,15 @@ export default function App() {
                       }`}>
                         {evt.operationType || 'MUTATION'}
                       </span>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                      <div className="flex items-center gap-2 text-[10px] text-neutral-400 font-mono">
                         <span className="text-emerald-400 font-bold">{evt.latencyMs || 6}ms</span>
                         <span>{new Date(evt.timestamp || Date.now()).toLocaleTimeString()}</span>
                       </div>
                     </div>
-                    <div className="text-[11px] text-slate-200 font-medium leading-relaxed">
+                    <div className="text-[11px] text-neutral-200 font-medium leading-relaxed">
                       {evt.summary}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between pt-0.5">
+                    <div className="text-[10px] text-neutral-500 font-mono flex items-center justify-between pt-0.5">
                       <span>Doc: #{evt.documentId?.slice(-6) || 'mem_01'}</span>
                       <span>Topic: {evt.topic || 'General'}</span>
                     </div>
@@ -3545,8 +3790,8 @@ export default function App() {
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-slate-800 bg-slate-950 text-center text-[10px] text-slate-500">
-              Atlas collection: <code className="text-slate-400">synapsemem.memories</code>
+            <div className="p-3 border-t border-white/10 bg-neutral-950 text-center text-[10px] text-neutral-500">
+              Atlas collection: <code className="text-neutral-400">synapsemem.memories</code>
             </div>
           </div>
         </div>
