@@ -113,7 +113,9 @@ export async function extractAndFormMemory({
   user,
   workspaceId,
   channel = 'architecture',
-  scope = 'workspace'
+  scope = 'workspace',
+  source = null,
+  tags = []
 }) {
   const privacyCheck = checkPrivacyFilter(text);
   if (!privacyCheck.safe) {
@@ -213,8 +215,8 @@ export async function extractAndFormMemory({
       reason: reason || 'Team architecture consensus',
       normalizedValue: topic.toLowerCase()
     },
-    tags: [topic.toLowerCase(), type],
-    source: {
+    tags: Array.from(new Set([topic.toLowerCase(), type, ...(tags || [])])),
+    source: source || {
       kind: 'conversation',
       channel: channel,
       excerpt: text.length > 120 ? text.slice(0, 117) + '...' : text

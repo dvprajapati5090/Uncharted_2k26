@@ -867,9 +867,9 @@ const server = http.createServer(async (req, res) => {
 
         realtimeSync.broadcast({
           operationType: 'insert',
-          collection: 'github_onboarding',
+          collection: 'memories',
           topic: 'GitHub Self-Onboarding',
-          summary: `Autonomously installed SynapseMem Guardian in ${parsed.fullName} via PR #${result.prNumber}`
+          summary: `Autonomously installed SynapseMem Guardian in ${parsed.fullName} & reverse-ingested ${result.ingestedMemories?.length || 0} memories.`
         });
 
         return sendJson(res, 201, result);
@@ -1005,7 +1005,9 @@ function formatMemoryForUI(mem) {
     valid_until: mem.validUntil ? new Date(mem.validUntil).toISOString() : null,
     superseded_by: mem.supersededBy,
     supersedes_id: mem.supersedesId,
-    confidence: mem.confidence || 0.95
+    confidence: mem.confidence || 0.95,
+    source: mem.source || null,
+    tags: mem.tags || []
   };
 }
 
@@ -1038,6 +1040,18 @@ async function start() {
   } catch (err) {
     console.warn('[Startup] Memory auto-seed check note:', err.message);
   }
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ [SynapseMem] Port ${PORT} is already in use by another process.`);
+      console.error(`   To free port ${PORT}, terminate the running process or start on an alternate port:`);
+      console.error(`   e.g. $env:PORT=3001; npm run dev\n`);
+      process.exit(1);
+    } else {
+      console.error('[SynapseMem] Server startup error:', err);
+      process.exit(1);
+    }
+  });
 
   server.listen(PORT, () => {
     console.log(`=======================================================`);
