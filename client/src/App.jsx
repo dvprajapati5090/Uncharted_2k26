@@ -93,8 +93,13 @@ export default function App() {
   const [activeEvaluatedProposal, setActiveEvaluatedProposal] = useState(null);
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
   const [llmModalOpen, setLlmModalOpen] = useState(false);
-  const [geminiKeyInput, setGeminiKeyInput] = useState('');
-  const [claudeKeyInput, setClaudeKeyInput] = useState('');
+  const [geminiKeyInput, setGeminiKeyInput] = useState(() => {
+    try { return localStorage.getItem('synapse_gemini_key') || ''; } catch (_) { return ''; }
+  });
+  const [claudeKeyInput, setClaudeKeyInput] = useState(() => {
+    try { return localStorage.getItem('synapse_claude_key') || ''; } catch (_) { return ''; }
+  });
+  const [testingKey, setTestingKey] = useState({ provider: null, status: null, message: '' });
   const [activeKeys, setActiveKeys] = useState({ hasGeminiKey: false, hasClaudeKey: false });
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeInspection, setActiveInspection] = useState(null);
@@ -173,6 +178,27 @@ export default function App() {
 
       loadMemories();
       loadTrainingData();
+      loadLlmModels();
+
+      // Sync saved local keys with backend
+      try {
+        const savedGemini = localStorage.getItem('synapse_gemini_key');
+        if (savedGemini) {
+          fetch('/api/llm/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'gemini', key: savedGemini })
+          }).catch(() => {});
+        }
+        const savedClaude = localStorage.getItem('synapse_claude_key');
+        if (savedClaude) {
+          fetch('/api/llm/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'claude', key: savedClaude })
+          }).catch(() => {});
+        }
+      } catch (_) {}
     } catch (err) {
       console.error('Initialization error:', err);
     }
@@ -563,7 +589,12 @@ export default function App() {
     try {
       const res = await fetch('/api/llm/models');
       const data = await res.json();
-      setActiveKeys(data.activeKeys || { hasGeminiKey: false, hasClaudeKey: false });
+      const localGemini = (typeof window !== 'undefined' ? localStorage.getItem('synapse_gemini_key') : '') || geminiKeyInput;
+      const localClaude = (typeof window !== 'undefined' ? localStorage.getItem('synapse_claude_key') : '') || claudeKeyInput;
+      setActiveKeys({
+        hasGeminiKey: !!(data.activeKeys?.hasGeminiKey || (localGemini && localGemini.trim().length > 0)),
+        hasClaudeKey: !!(data.activeKeys?.hasClaudeKey || (localClaude && localClaude.trim().length > 0))
+      });
     } catch (err) {
       console.error('Failed to load LLM models:', err);
     }
@@ -572,25 +603,89 @@ export default function App() {
   const handleSaveLlmKeys = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     try {
-      if (geminiKeyInput.trim()) {
+      const cleanGemini = geminiKeyInput.trim();
+      const cleanClaude = claudeKeyInput.trim();
+
+      if (cleanGemini) {
+        localStorage.setItem('synapse_gemini_key', cleanGemini);
         await fetch('/api/llm/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: 'gemini', key: geminiKeyInput.trim() })
+          body: JSON.stringify({ provider: 'gemini', key: cleanGemini })
         });
-      }
-      if (claudeKeyInput.trim()) {
+      } else {
+        localStorage.removeItem('synapse_gemini_key');
         await fetch('/api/llm/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: 'claude', key: claudeKeyInput.trim() })
+          body: JSON.stringify({ provider: 'gemini', key: '' })
         });
       }
-      showToast('LLM API keys updated successfully', 'success');
+
+      if (cleanClaude) {
+        localStorage.setItem('synapse_claude_key', cleanClaude);
+        await fetch('/api/llm/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'claude', key: cleanClaude })
+        });
+      } else {
+        localStorage.removeItem('synapse_claude_key');
+        await fetch('/api/llm/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'claude', key: '' })
+        });
+      }
+
+      setActiveKeys({
+        hasGeminiKey: !!cleanGemini,
+        hasClaudeKey: !!cleanClaude
+      });
+
+      showToast('LLM API keys saved & activated', 'success');
       setLlmModalOpen(false);
-      loadLlmModels();
+      await loadLlmModels();
     } catch (err) {
       showToast('Failed to save LLM keys', 'error');
+    }
+  };
+
+  const handleTestLlmKey = async (provider) => {
+    const key = provider === 'gemini' ? geminiKeyInput.trim() : claudeKeyInput.trim();
+    if (!key) {
+      showToast(`Please enter a ${provider === 'gemini' ? 'Gemini' : 'Claude'} key first`, 'error');
+      return;
+    }
+    setTestingKey({ provider, status: 'loading', message: `Connecting to ${provider === 'gemini' ? 'Google Cloud' : 'Anthropic'} API...` });
+    try {
+      const res = await fetch('/api/llm/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, key })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestingKey({
+          provider,
+          status: 'success',
+          message: `Verified! Cloud Response: "${data.response}"`
+        });
+        showToast(`${data.provider} verified & live!`, 'success');
+        if (provider === 'gemini') localStorage.setItem('synapse_gemini_key', key);
+        if (provider === 'claude') localStorage.setItem('synapse_claude_key', key);
+        await loadLlmModels();
+      } else {
+        setTestingKey({
+          provider,
+          status: 'error',
+          message: `Connection Failed: ${data.error || 'Invalid API key or quota issue'}`
+        });
+        showToast(`Test failed: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      setTestingKey({ provider, status: 'error', message: `Network error: ${err.message}` });
+      showToast('Network error during test', 'error');
     }
   };
 
@@ -654,6 +749,10 @@ export default function App() {
       setIsStreaming(true);
 
       try {
+        const activeApiKey = selectedModel.includes('claude')
+          ? (claudeKeyInput.trim() || (typeof window !== 'undefined' ? localStorage.getItem('synapse_claude_key') : '') || '')
+          : (geminiKeyInput.trim() || (typeof window !== 'undefined' ? localStorage.getItem('synapse_gemini_key') : '') || '');
+
         const response = await fetch('/api/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -661,7 +760,8 @@ export default function App() {
             query: textToSend,
             userId: activeUser?.id || 'u_sarah',
             workspaceId: activeTeam?.id || 'ws_core',
-            model: selectedModel
+            model: selectedModel,
+            apiKey: activeApiKey
           })
         });
 
@@ -1175,6 +1275,14 @@ export default function App() {
                             {msg.inspection_data?.promptPayload?.providerUsed && (
                               <span className="text-[9px] text-slate-400 font-mono">
                                 [{msg.inspection_data.promptPayload.providerUsed}]
+                              </span>
+                            )}
+                            {msg.inspection_data?.promptPayload?.liveError && !msg.inspection_data?.promptPayload?.isLiveModel && selectedModel !== 'local-grounded' && (
+                              <span
+                                className="text-[9px] text-amber-300 bg-amber-950/70 border border-amber-800/80 rounded px-1.5 py-0.5 font-mono"
+                                title={msg.inspection_data.promptPayload.liveError}
+                              >
+                                ⚠️ Note: {msg.inspection_data.promptPayload.liveError.length > 55 ? msg.inspection_data.promptPayload.liveError.substring(0, 52) + '...' : msg.inspection_data.promptPayload.liveError}
                               </span>
                             )}
                           </div>
@@ -2996,16 +3104,26 @@ export default function App() {
             </p>
 
             <form onSubmit={handleSaveLlmKeys} className="space-y-3.5">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-slate-200 font-semibold flex items-center gap-1.5">
                     <span className="text-sm">⚡</span> Google Gemini API Key
                   </label>
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                    activeKeys.hasGeminiKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
-                  }`}>
-                    {activeKeys.hasGeminiKey ? 'Active Key Set' : 'Fallback / Unset'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                      activeKeys.hasGeminiKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                    }`}>
+                      {activeKeys.hasGeminiKey ? 'Active Key Set' : 'Fallback / Unset'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={testingKey.status === 'loading'}
+                      onClick={() => handleTestLlmKey('gemini')}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition-colors"
+                    >
+                      {testingKey.provider === 'gemini' && testingKey.status === 'loading' ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="password"
@@ -3014,18 +3132,37 @@ export default function App() {
                   placeholder="AIzaSy..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
+                {testingKey.provider === 'gemini' && testingKey.message && (
+                  <p className={`text-[10px] font-mono px-2 py-1 rounded border ${
+                    testingKey.status === 'success' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80' :
+                    testingKey.status === 'error' ? 'bg-rose-950/60 text-rose-300 border-rose-800/80' :
+                    'bg-slate-950 text-slate-400 border-slate-800'
+                  }`}>
+                    {testingKey.message}
+                  </p>
+                )}
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-slate-200 font-semibold flex items-center gap-1.5">
                     <span className="text-sm">🔮</span> Anthropic Claude API Key
                   </label>
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                    activeKeys.hasClaudeKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
-                  }`}>
-                    {activeKeys.hasClaudeKey ? 'Active Key Set' : 'Fallback / Unset'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                      activeKeys.hasClaudeKey ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                    }`}>
+                      {activeKeys.hasClaudeKey ? 'Active Key Set' : 'Fallback / Unset'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={testingKey.status === 'loading'}
+                      onClick={() => handleTestLlmKey('claude')}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition-colors"
+                    >
+                      {testingKey.provider === 'claude' && testingKey.status === 'loading' ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="password"
@@ -3034,6 +3171,15 @@ export default function App() {
                   placeholder="sk-ant-api..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
+                {testingKey.provider === 'claude' && testingKey.message && (
+                  <p className={`text-[10px] font-mono px-2 py-1 rounded border ${
+                    testingKey.status === 'success' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80' :
+                    testingKey.status === 'error' ? 'bg-rose-950/60 text-rose-300 border-rose-800/80' :
+                    'bg-slate-950 text-slate-400 border-slate-800'
+                  }`}>
+                    {testingKey.message}
+                  </p>
+                )}
               </div>
 
               <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-slate-400 leading-relaxed">

@@ -2,5 +2,6 @@ node_modules/
 data/*.db
 data/*.db-journal
 .env
+.runtime_keys.json
 .DS_Store
 Thumbs.db
