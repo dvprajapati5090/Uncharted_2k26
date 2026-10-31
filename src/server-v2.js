@@ -565,10 +565,19 @@ export async function handleRequest(req, res) {
     if (req.method === 'GET' && pathname === '/api/memories') {
       await refreshExpirations();
       const status = parsedUrl.searchParams.get('status') || 'all';
-      const filter = {};
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || parsedUrl.searchParams.get('teamId') || 'ws_core';
+      const userId = parsedUrl.searchParams.get('userId');
+
+      const filter = { workspaceId };
       if (status !== 'all') filter.status = status;
 
-      const memories = await findMemories(filter);
+      let memories = await findMemories(filter);
+      if (userId) {
+        memories = memories.filter(m => {
+          if (m.scope === 'personal' && m.ownerId !== userId) return false;
+          return true;
+        });
+      }
       return sendJson(res, 200, memories.map(formatMemoryForUI));
     }
 
@@ -765,7 +774,7 @@ export async function handleRequest(req, res) {
     // 6.8. KNOWLEDGE GRAPH & GRAPHRAG LINEAGE API
     // ----------------------------------------------------
     if (req.method === 'GET' && pathname === '/api/graph') {
-      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || parsedUrl.searchParams.get('teamId') || 'ws_core';
       const graph = await getMemoryGraph(workspaceId);
       return sendJson(res, 200, graph);
     }

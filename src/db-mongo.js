@@ -893,29 +893,43 @@ const DOMAIN_DEFINITIONS = [
     id: 'domain_persistence',
     name: 'Persistence & Data Layer',
     topic: 'Infrastructure',
-    keywords: ['mongodb', 'mongo', 'atlas', 'database', 'redis', 'cache', 'caching', 'storage', 'postgres', 'sql', 'nosql', 'db'],
+    keywords: ['mongodb', 'mongo', 'atlas', 'database', 'redis', 'cache', 'caching', 'storage', 'postgres', 'sql', 'nosql', 'db', 'prisma', 'mysql', 'typeorm', 'datastore', 'persistence'],
     macroDirective: 'Authoritative data persistence is governed by MongoDB Atlas. Redis is provisioned as high-performance cache with strict approval boundaries.'
   },
   {
     id: 'domain_deployment',
     name: 'Release & Delivery Governance',
     topic: 'Deployment',
-    keywords: ['deploy', 'deployment', 'freeze', 'release', 'production', 'prod', 'canary', 'pipeline', 'cicd'],
+    keywords: ['deploy', 'deployment', 'freeze', 'release', 'production', 'prod', 'canary', 'pipeline', 'cicd', 'github actions', 'linter', 'guardian'],
     macroDirective: 'Production deployments enforce automated CI gates and temporal freeze periods during sprint releases.'
+  },
+  {
+    id: 'domain_cloud_integrations',
+    name: 'Cloud Services & API Integrations',
+    topic: 'Integrations',
+    keywords: ['stripe', 'gemini', 'claude', 'voyage', 'sendgrid', 'aws', 'gcp', 'cloud', 'rest', 'sdk', 'integration', 'token', 'api', 'env'],
+    macroDirective: 'Third-party cloud infrastructure and API integrations adhere to approved governance manifests.'
+  },
+  {
+    id: 'domain_security',
+    name: 'Security & Privacy Governance',
+    topic: 'Security',
+    keywords: ['auth', 'security', 'privacy', 'credential', 'secret', 'bearer', 'zero-trust', 'token', 'jwt', 'rbac', 'permission'],
+    macroDirective: 'Zero-Trust security gates enforce strict secret redaction and client-isolated encryption.'
   },
   {
     id: 'domain_devex',
     name: 'Developer Ergonomics & Standards',
     topic: 'Architecture',
-    keywords: ['ide', 'theme', 'vim', 'contrast', 'editor', 'linter', 'eslint', 'standards', 'formatting', 'keybindings'],
+    keywords: ['ide', 'theme', 'vim', 'contrast', 'editor', 'linter', 'eslint', 'standards', 'formatting', 'keybindings', 'adr', 'rfc'],
     macroDirective: 'Developer environment adheres to team ergonomics, high-contrast themes, and unified workspace keybindings.'
   },
   {
     id: 'domain_core',
     name: 'Core Application Architecture',
     topic: 'Core',
-    keywords: ['node', 'express', 'backend', 'service', 'api', 'framework', 'architecture'],
-    macroDirective: 'Core microservices utilize modular Express routers with strict schema-first boundaries.'
+    keywords: ['node', 'express', 'fastify', 'backend', 'service', 'api', 'framework', 'architecture', 'react', 'next', 'nextjs', 'vue', 'python', 'fastapi', 'django', 'package.json'],
+    macroDirective: 'Core application services utilize modern modular components with strict schema-first boundaries.'
   }
 ];
 
@@ -1016,7 +1030,17 @@ export async function buildHierarchicalClusters(workspaceId = 'ws_core') {
       supersededCount,
       expiredCount,
       healthScore,
-      children: mappedChildren
+      children: mappedChildren.map(c => ({
+        ...c,
+        decision: c.statement || c.decision || c.topic,
+        statement: c.statement || c.decision || c.topic
+      })),
+      decisions: mappedChildren.map(c => ({
+        ...c,
+        decision: c.statement || c.decision || c.topic,
+        statement: c.statement || c.decision || c.topic
+      })),
+      description: cluster.macroDirective
     });
   }
 

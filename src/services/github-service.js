@@ -91,6 +91,41 @@ process.exit(0);
 }
 
 /**
+ * Safely creates or updates a file in a GitHub repository,
+ * dynamically fetching the existing blob SHA if the file already exists on the branch.
+ */
+async function commitOrUpdateFileContents(octokit, { owner, repo, path, message, content, branch }) {
+  let fileSha = undefined;
+  try {
+    const existing = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref: branch
+    });
+    if (existing.data && existing.data.sha) {
+      fileSha = existing.data.sha;
+    }
+  } catch (err) {
+    // File does not exist yet on target branch, creating new file
+  }
+
+  const payload = {
+    owner,
+    repo,
+    path,
+    message,
+    content: Buffer.from(content).toString('base64'),
+    branch
+  };
+  if (fileSha) {
+    payload.sha = fileSha;
+  }
+
+  return await octokit.rest.repos.createOrUpdateFileContents(payload);
+}
+
+/**
  * Parses GitHub Repository URL into { owner, repo }
  */
 export function parseGitHubUrl(repoUrl) {
@@ -400,6 +435,40 @@ export async function reverseIngestCodebaseMemories({
     }
   }
 
+  // 5. Connect dependencies & architectural lineage in the Knowledge Graph and compute Domain Hierarchy
+  try {
+    const { addMemoryRelation, buildHierarchicalClusters } = await import('../db-mongo.js');
+    const manifestMem = ingested.find(m => m.source === 'package.json' || m.source === 'pyproject.toml');
+    const envMem = ingested.find(m => m.source === '.env.example');
+    const adrMems = ingested.filter(m => (m.source && m.source.includes('adr')));
+    const readmeMem = ingested.find(m => m.source === 'README.md');
+
+    if (manifestMem && envMem) {
+      await addMemoryRelation(manifestMem.memoryId, envMem.memoryId, 'integrates_with', 'Approved Cloud Stack');
+    }
+
+    if (manifestMem) {
+      for (const adr of adrMems) {
+        await addMemoryRelation(manifestMem.memoryId, adr.memoryId, 'governed_by', `ADR: ${adr.topic}`);
+      }
+    }
+
+    if (readmeMem && manifestMem) {
+      await addMemoryRelation(readmeMem.memoryId, manifestMem.memoryId, 'implements_architecture', 'Runtime Implementation');
+    }
+
+    // Link ADRs between each other
+    for (let i = 0; i < adrMems.length; i++) {
+      for (let j = i + 1; j < adrMems.length; j++) {
+        await addMemoryRelation(adrMems[i].memoryId, adrMems[j].memoryId, 'complements', 'Consensus Boundary');
+      }
+    }
+
+    await buildHierarchicalClusters(workspaceId);
+  } catch (err) {
+    console.warn('[GitHub Ingestion] Relation & hierarchy build note:', err.message);
+  }
+
   return ingested;
 }
 
@@ -450,32 +519,32 @@ export async function installGuardianPullRequest({
     });
 
     // 4. Commit .github/workflows/synapse-pr-linter.yml
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: '.github/workflows/synapse-pr-linter.yml',
       message: 'feat(ci): install SynapseMem 2.0 architectural PR compliance linter workflow',
-      content: Buffer.from(workflowContent).toString('base64'),
+      content: workflowContent,
       branch: targetBranch
     });
 
     // 5. Commit scripts/pr-linter.mjs (Universal ESM)
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: 'scripts/pr-linter.mjs',
       message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine (.mjs)',
-      content: Buffer.from(linterContent).toString('base64'),
+      content: linterContent,
       branch: targetBranch
     });
 
     // 5b. Commit scripts/pr-linter.js (Dual compatibility wrapper)
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: 'scripts/pr-linter.js',
       message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine (.js)',
-      content: Buffer.from(linterContent).toString('base64'),
+      content: linterContent,
       branch: targetBranch
     });
 
@@ -607,12 +676,12 @@ ${memory.content?.reason || memory.reason || 'Team consensus established in Syna
       sha: refData.data.object.sha
     });
 
-    await octokit.rest.repos.createOrUpdateFileContents({
+    await commitOrUpdateFileContents(octokit, {
       owner,
       repo,
       path: adrFileName,
       message: `docs(adr): record ADR-00${adrIndex} for ${memory.topic} decision`,
-      content: Buffer.from(adrMarkdown).toString('base64'),
+      content: adrMarkdown,
       branch: targetBranch
     });
 
