@@ -78,8 +78,8 @@ export function parseTemporalValidity(text, baseDate = getAppNow()) {
 
   const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
-  // Format 1: until October 30, 2026
-  const untilMatch1 = lower.match(/(?:until|before|by)\s+([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/i);
+  // Format 1: until October 30, 2026 / till November 4, 2026
+  const untilMatch1 = lower.match(/(?:until|till|before|by|through|up\s+to)\s+([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/i);
   if (untilMatch1) {
     const mIdx = monthNames.findIndex(m => untilMatch1[1].toLowerCase().startsWith(m));
     if (mIdx !== -1) {
@@ -90,8 +90,8 @@ export function parseTemporalValidity(text, baseDate = getAppNow()) {
     }
   }
 
-  // Format 2: until 30 October 2026 / 30th Oct
-  const untilMatch2 = lower.match(/(?:until|before|by)\s+(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:,?\s*(\d{4}))?/i);
+  // Format 2: until 30 October 2026 / 30th Oct / till 4 November 2026
+  const untilMatch2 = lower.match(/(?:until|till|before|by|through|up\s+to)\s+(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:,?\s*(\d{4}))?/i);
   if (untilMatch2) {
     const mIdx = monthNames.findIndex(m => untilMatch2[2].toLowerCase().startsWith(m));
     if (mIdx !== -1) {
@@ -134,8 +134,10 @@ export async function extractAndFormMemory({
     return { extracted: null, reason: 'Questions and queries are not architectural decisions or constraints.' };
   }
 
-  // 1. Constraint Detection (Negative boundary or prohibition)
-  const isConstraint = /\b(?:do\s+not|don't|cannot|can't|must\s+not|should\s+not|never|prohibit(?:ed)?|forbidden|not\s+allowed|no\s+production|without\s+approval|freeze|block(?:ed)?|restrict(?:ed)?|avoid)\b/i.test(text);
+  // 1. Constraint Detection (Negative boundary, prohibition, freeze, or restriction)
+  const isConstraint = /\b(?:do\s+not|don't|cannot|can't|must\s+not|should\s+not|never|prohibit(?:ed)?|forbidden|not\s+allowed|without\s+approval|freeze|block(?:ed)?|restrict(?:ed)?|avoid|disallow(?:ed)?|halt(?:ed)?|pause(?:d)?)\b/i.test(text) ||
+    /\bno\s+(?:production|deployment|deployments|release|releases|error\s+correction|error\s+corrections|hotfix|hotfixes|change|changes|refactor|migration|push|pushes|feature|features)\b/i.test(text) ||
+    /\bno\s+[a-z0-9_\-\s]+\s+(?:until|till|before|by|through)\b/i.test(text);
 
   // 2. Preference Detection (Developer or individual preference)
   const isPreference = /\b(?:prefer|preference|we\s+prefer|favour|favor|like\s+to|better\s+to|best\s+to|should\s+be\s+written\s+in)\b/i.test(text);
@@ -148,15 +150,24 @@ export async function extractAndFormMemory({
 
   const hasStructuralAssertion = /\b(?:as\s+our|as\s+out|is\s+our|is\s+the|for\s+(?:our|this)\s+project|our\s+frontend|our\s+backend|our\s+database|our\s+stack|our\s+choice|frontend\s+tool|backend\s+tool|database\s+tool)\b/i.test(text);
 
-  const isDecision = isConstraint ? false : (
+  let isDecision = isConstraint ? false : (
     (hasDecisionVerbs && (hasTechnicalKeyword || hasStructuralAssertion)) ||
     (hasStructuralAssertion && hasTechnicalKeyword) ||
     ((channel === 'architecture' || channel === 'sprint-planning') && (hasTechnicalKeyword || hasDecisionVerbs) && text.trim().length >= 15) ||
     /\bwe(?:'re| are) using|decided (?:to|on)|switching to|settled on|will use|\bwe use\b|approved|now approved/i.test(text)
   );
 
+  // If in a dedicated team channel and length is substantive, don't drop directives
   if (!isDecision && !isConstraint && !isPreference) {
-    return { extracted: null, reason: 'No architectural directive or constraint pattern identified.' };
+    if ((channel === 'architecture' || channel === 'sprint-planning') && text.trim().length >= 12) {
+      if (/\b(?:no|freeze|stop|pause|halt|until|till|must|require|deadline|goal)\b/i.test(text)) {
+        // Fallback constraint
+      } else {
+        isDecision = true;
+      }
+    } else {
+      return { extracted: null, reason: 'No architectural directive or constraint pattern identified.' };
+    }
   }
 
   const type = isConstraint ? 'constraint' : (isPreference ? 'preference' : 'decision');
@@ -165,10 +176,11 @@ export async function extractAndFormMemory({
   let topic = 'Architecture';
   if (/redis|cache|caching|queue|bullmq|celery|kafka|rabbitmq|broker/i.test(text)) topic = 'Infrastructure';
   else if (/database|postgres|mongo|sql|nosql|dynamodb|db/i.test(text)) topic = 'Database';
-  else if (/deploy|production|freeze|release|pipeline|ci\/cd|docker|container|kubernetes|k8s/i.test(text)) topic = 'Deployment';
+  else if (/deploy|production|freeze|release|pipeline|ci\/cd|docker|container|kubernetes|k8s|error\s+correction|sprint|hotfix/i.test(text)) topic = channel === 'sprint-planning' ? 'Sprint Planning' : 'Deployment';
   else if (/frontend|react|vue|svelte|angular|next|tailwind|css|ui/i.test(text)) topic = 'Frontend';
   else if (/jwt|auth|oauth|security|token|sanitiz|port|firewall|permission|secret/i.test(text)) topic = 'Security';
   else if (/backend|api|fastapi|express|rest|grpc|service/i.test(text)) topic = 'Backend';
+  else if (channel === 'sprint-planning') topic = 'Sprint Planning';
 
   // Statement & reason parsing
   let statement = text;

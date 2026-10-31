@@ -750,32 +750,48 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && pathname === '/api/demo/seed') {
-      await wipeAllStoredData();
+      const body = await parseBody(req).catch(() => ({}));
+      // Only wipe if explicitly asked (e.g. hard reset)
+      if (body.wipeAll) {
+        await wipeAllStoredData();
+      }
       setSimulatedTime('2026-10-30T10:00:00.000Z');
 
-      // Seed Demo 1: Core stack decisions & constraints
-      await extractAndFormMemory({
-        text: 'For Project Atlas, we use Node.js, Express and MongoDB Atlas.',
-        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
-        workspaceId: 'ws_core',
-        channel: 'architecture'
-      });
+      // Ensure foundational demo memories exist without wiping user-created memories
+      const existing = await findMemories({ workspaceId: 'ws_core' });
+      const hasNodeDb = existing.some(m => m.content?.statement?.includes('Node.js'));
+      const hasRedis = existing.some(m => m.content?.statement?.includes('Redis'));
+      const hasDeploy = existing.some(m => m.content?.statement?.includes('production deployments'));
 
-      await extractAndFormMemory({
-        text: 'Do not introduce Redis or paid infrastructure without approval.',
-        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
-        workspaceId: 'ws_core',
-        channel: 'architecture'
-      });
+      if (!hasNodeDb) {
+        await extractAndFormMemory({
+          text: 'For Project Atlas, we use Node.js, Express and MongoDB Atlas.',
+          user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+          workspaceId: 'ws_core',
+          channel: 'architecture'
+        });
+      }
 
-      await extractAndFormMemory({
-        text: 'No production deployments until November 5, 2026.',
-        user: { id: 'u_marcus', name: 'Marcus Chen' },
-        workspaceId: 'ws_core',
-        channel: 'sprint-planning'
-      });
+      if (!hasRedis) {
+        await extractAndFormMemory({
+          text: 'Do not introduce Redis or paid infrastructure without approval.',
+          user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+          workspaceId: 'ws_core',
+          channel: 'architecture'
+        });
+      }
 
-      return sendJson(res, 200, { status: 'seeded', count: 3 });
+      if (!hasDeploy) {
+        await extractAndFormMemory({
+          text: 'No production deployments until November 5, 2026.',
+          user: { id: 'u_marcus', name: 'Marcus Chen' },
+          workspaceId: 'ws_core',
+          channel: 'sprint-planning'
+        });
+      }
+
+      const totalCount = (await findMemories({ workspaceId: 'ws_core' })).length;
+      return sendJson(res, 200, { status: 'seeded', count: totalCount });
     }
 
     // Static files
