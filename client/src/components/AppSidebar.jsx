@@ -432,13 +432,19 @@ export default function AppSidebar({
               <span className="sidebar-label">{inspectOpen ? 'Close Inspector' : 'Vector Inspector'}</span>
             </button>
 
+            {/* Primary USP Feature Highlight */}
             <button
               onClick={onOpenGithubModal}
-              className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 text-xs text-neutral-300 hover:text-white hover:bg-white/5 transition"
-              title="Autonomous GitHub Repo Onboarding & PR Guardian"
+              className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between text-xs bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 transition shadow-sm group"
+              title="Autonomous GitHub Repo Onboarding & PR Guardian (Primary USP)"
             >
-              <GitPullRequest className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="sidebar-label">GitHub Guardian PR</span>
+              <div className="flex items-center gap-2.5 truncate">
+                <GitPullRequest className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
+                <span className="sidebar-label font-semibold text-emerald-200">GitHub Guardian</span>
+              </div>
+              <span className="sidebar-label text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-emerald-400/20 text-emerald-200 border border-emerald-400/30 font-mono">
+                USP
+              </span>
             </button>
 
             <button

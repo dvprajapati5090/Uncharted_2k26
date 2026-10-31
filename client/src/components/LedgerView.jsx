@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Database,
   Layers,
@@ -29,6 +29,7 @@ import {
 
 export default function LedgerView({
   memories = [],
+  loadMemories,
   ledgerView = 'cards',
   setLedgerView,
   ledgerFilter = 'all',
@@ -43,7 +44,8 @@ export default function LedgerView({
   onRecluster,
   isClustering,
   onOpenLinkModal,
-  graphData,
+  graphData = { nodes: [], edges: [], summary: {} },
+  loadGraphData,
   selectedGraphNode,
   setSelectedGraphNode,
   graphLineage,
@@ -54,10 +56,27 @@ export default function LedgerView({
   hierarchySearchQuery,
   setHierarchySearchQuery,
   hierarchySearchResult,
-  handleHierarchySearch
+  handleHierarchySearch,
+  onOpenGithubGuardian
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMemoryDetail, setSelectedMemoryDetail] = useState(null);
+
+  // Auto-fetch data on mount or when switching view modes
+  useEffect(() => {
+    if (loadMemories) loadMemories();
+    if (loadGraphData) loadGraphData();
+    if (loadHierarchyData) loadHierarchyData();
+  }, []);
+
+  useEffect(() => {
+    if (ledgerView === 'graph' && loadGraphData) {
+      loadGraphData();
+    } else if (ledgerView === 'hierarchy' && loadHierarchyData) {
+      loadHierarchyData();
+    }
+  }, [ledgerView]);
+
 
   // Filter memories by status, confidence, and search query
   const filteredMemories = useMemo(() => {
@@ -193,6 +212,17 @@ export default function LedgerView({
               className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow disabled:opacity-50"
             >
               <Boxes className="w-3.5 h-3.5" /> {isClustering ? 'Clustering...' : 'Re-cluster'}
+            </button>
+          )}
+
+          {onOpenGithubGuardian && (
+            <button
+              onClick={onOpenGithubGuardian}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 flex items-center gap-1.5 transition shadow-sm"
+              title="Install GitHub PR Guardian Linter"
+            >
+              <GitPullRequest className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>GitHub Guardian</span>
             </button>
           )}
 
@@ -380,20 +410,38 @@ export default function LedgerView({
                         )}
                       </div>
 
-                      {/* Quick Inspect Button */}
+                      {/* Quick Actions: Edit, Delete, Sync, Inspect */}
                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => onEditMemory && onEditMemory(mem)}
+                          className="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition"
+                          title="Edit Directive"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Delete this directive from MongoDB?')) {
+                              onDeleteMemory && onDeleteMemory(mem.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition"
+                          title="Delete from MongoDB"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                         <button
                           onClick={() => onSyncAdrToGitHub && onSyncAdrToGitHub(mem)}
                           disabled={isSyncingAdr}
-                          className="p-1 rounded-md hover:bg-white/10 text-neutral-400 hover:text-emerald-300 transition"
-                          title="Sync as Living ADR PR on GitHub"
+                          className="p-1.5 rounded-lg hover:bg-emerald-500/20 text-neutral-400 hover:text-emerald-300 transition"
+                          title="Sync as Living ADR PR on GitHub (USP)"
                         >
-                          <GitPullRequest className="w-3.5 h-3.5" />
+                          <GitPullRequest className="w-3 h-3" />
                         </button>
                         <button
                           onClick={() => setSelectedMemoryDetail(mem)}
-                          className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white text-[10px] font-semibold transition"
-                          title="Inspect Details & Vector Dimensionality"
+                          className="ml-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-neutral-200 hover:text-white text-[10px] font-semibold transition border border-white/10"
+                          title="Inspect 1024D Voyage Vectors & Metadata"
                         >
                           Inspect →
                         </button>
