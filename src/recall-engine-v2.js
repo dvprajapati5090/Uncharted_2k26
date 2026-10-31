@@ -82,26 +82,28 @@ export async function recallMemories({
         continue;
       }
 
-      const isExpired = candidate.status === 'expired' || (candidate.validUntil && new Date(candidate.validUntil) < now);
-      if (!isHistorical && isExpired) {
-        const dateStr = candidate.validUntil 
-          ? new Date(candidate.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-          : 'scheduled date';
-        rejectedMemories.push({
-          id: candidate._id.toString(),
-          topic: candidate.topic,
-          reason: `Logically expired on ${dateStr}`,
-          score: candidate.score,
-          statement: candidate.content?.statement,
-          validUntil: candidate.validUntil,
-          isExpired: true
-        });
-        continue;
-      }
-
       const candText = ((candidate.content?.statement || '') + ' ' + (candidate.topic || '')).toLowerCase();
       const hasEntityMatch = qWords.some(w => candText.includes(w));
-      const threshold = hasEntityMatch ? 0.10 : 0.25;
+      const threshold = hasEntityMatch ? 0.08 : 0.20;
+
+      const isExpired = candidate.status === 'expired' || (candidate.validUntil && new Date(candidate.validUntil) < now);
+      if (!isHistorical && isExpired) {
+        if (candidate.score >= threshold || hasEntityMatch) {
+          const dateStr = candidate.validUntil 
+            ? new Date(candidate.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'scheduled date';
+          rejectedMemories.push({
+            id: candidate._id.toString(),
+            topic: candidate.topic,
+            reason: `Logically expired on ${dateStr}`,
+            score: candidate.score,
+            statement: candidate.content?.statement,
+            validUntil: candidate.validUntil,
+            isExpired: true
+          });
+        }
+        continue;
+      }
 
       if (candidate.score < threshold) {
         rejectedMemories.push({
@@ -133,6 +135,33 @@ export async function recallMemories({
         if (qWords.some(w => w.length > 3 && memText.includes(w))) {
           if (!selectedMemories.some(s => s._id.toString() === mem._id.toString())) {
             selectedMemories.push(mem);
+          }
+        }
+      }
+
+      // Check expired memories for temporal explanation if no active memories matched
+      if (selectedMemories.length === 0 && !rejectedMemories.some(r => r.isExpired && qWords.some(w => w.length > 3 && (r.statement || '').toLowerCase().includes(w)))) {
+        const allExpired = await findMemories({
+          workspaceId: allowedWorkspaceId,
+          status: 'expired'
+        });
+        for (const expMem of allExpired) {
+          const expText = ((expMem.content?.statement || '') + ' ' + (expMem.topic || '')).toLowerCase();
+          if (qWords.some(w => w.length > 3 && expText.includes(w))) {
+            const dateStr = expMem.validUntil 
+              ? new Date(expMem.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : 'scheduled date';
+            if (!rejectedMemories.some(r => r.id === expMem._id.toString())) {
+              rejectedMemories.push({
+                id: expMem._id.toString(),
+                topic: expMem.topic,
+                reason: `Logically expired on ${dateStr}`,
+                score: 0.95,
+                statement: expMem.content?.statement,
+                validUntil: expMem.validUntil,
+                isExpired: true
+              });
+            }
           }
         }
       }
