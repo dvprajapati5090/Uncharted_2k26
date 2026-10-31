@@ -281,13 +281,25 @@ export default function App() {
       const teams = await teamRes.json();
       setAllTeams(teams);
 
-      const team = teams[0] || { id: 'ws_core', name: 'Apollo Core Engineering' };
+      let savedTeam = null;
+      try {
+        const savedTeamId = localStorage.getItem('synapse_active_team_id');
+        if (savedTeamId) savedTeam = teams.find(t => t.id === savedTeamId);
+      } catch (_) {}
+
+      const team = savedTeam || teams[0] || { id: 'ws_core', name: 'Apollo Core Engineering' };
       setActiveTeam(team);
 
       const userRes = await fetch(`/api/teams/${team.id}/users`);
       const users = await userRes.json();
       setTeamMembers(users);
-      setActiveUser(users[0] || { id: 'u_sarah', name: 'Sarah Jenkins', role: 'Tech Lead', avatar: 'SJ' });
+      let savedUser = null;
+      try {
+        const savedUserId = localStorage.getItem('synapse_active_user_id');
+        if (savedUserId) savedUser = users.find(u => u.id === savedUserId);
+      } catch (_) {}
+
+      setActiveUser(savedUser || users[0] || { id: 'u_cand_a', name: 'Candidate A', role: 'Sprint Developer', avatar: 'CA' });
 
       const chanRes = await fetch('/api/channels');
       const chans = await chanRes.json();
@@ -1082,12 +1094,12 @@ export default function App() {
       setFormStatus('active');
       setFormValidUntil('');
     }
-    setAddModalOpen(true);
+    setAddModalOpen(true); }; const handleLogin = (team, user) => { if (team) { setActiveTeam(team); try { localStorage.setItem('synapse_active_team_id', team.id); } catch (_) {} } if (user) { setActiveUser(user); try { localStorage.setItem('synapse_active_user_id', user.id); } catch (_) {} } setViewMode('app'); showToast(`Signed in as ${user?.name || 'Developer'} (${user?.role || 'Member'}) • ${team?.name || 'Workspace'}`, 'success');
   };
 
   if (viewMode === 'landing') {
     return (
-      <LandingPage
+      <LandingPage allTeams={allTeams} teamMembers={teamMembers} activeTeam={activeTeam} activeUser={activeUser} onLogin={handleLogin}
         onEnterApp={() => setViewMode('app')}
         onEnterDemo={() => {
           setViewMode('app');
@@ -1131,7 +1143,7 @@ export default function App() {
             </div>
             <div>
               <div className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-                <span>Vesper<span className="font-normal text-white/60">.ai</span></span>
+                <span>Synapse<span className="font-normal text-white/60">Mem</span></span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-neutral-300 font-mono border border-white/15">
                   SynapseMem 2.0
                 </span>
@@ -1147,7 +1159,7 @@ export default function App() {
             onClick={() => setViewMode('landing')}
             className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/25 transition ml-1"
           >
-            ← Overview
+            ← Landing & Sign In
           </button>
         </div>
 
@@ -1318,15 +1330,15 @@ export default function App() {
           </button>
 
           {/* Active User Avatar */}
-          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+          <button onClick={() => setViewMode('landing')} className="flex items-center gap-2 pl-2 border-l border-white/10 hover:opacity-80 transition cursor-pointer text-left focus:outline-none" title="Switch User / Sign Out to Landing Page">
             <div className="w-7 h-7 rounded-full bg-white text-black font-bold flex items-center justify-center text-xs shadow">
               {activeUser?.avatar || 'U'}
             </div>
             <div className="hidden 2xl:block text-left">
               <span className="block text-xs font-semibold text-neutral-200 leading-tight">{activeUser?.name}</span>
-              <span className="block text-[10px] text-neutral-400 leading-tight">{activeUser?.role}</span>
+              <span className="block text-[10px] text-neutral-400 leading-tight">{activeUser?.role} • Switch</span>
             </div>
-          </div>
+          </button>
         </div>
       </header>
 

@@ -1,9 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../landing.css';
 
-export default function LandingPage({ onEnterApp, onEnterDemo }) {
+export default function LandingPage({
+  onEnterApp,
+  onEnterDemo,
+  allTeams = [],
+  teamMembers = [],
+  activeTeam,
+  activeUser,
+  onLogin
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState(null); // 'benefits' | 'how-it-works' | 'faqs' | 'pricing' | null
+  const [activeModal, setActiveModal] = useState(null); // 'core-engine' | 'how-it-works' | 'token-guard' | 'why-not-chat' | null
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+
+  // Teams & Users resolution
+  const defaultTeams = [
+    { id: 'ws_core', name: 'Apollo Core Engineering', description: 'Architecture, DB & Distributed Systems' },
+    { id: 'ws_sprint', name: 'Alpha Hackathon Sprint', description: 'Collaborative sprint team with token collision radar' }
+  ];
+
+  const defaultMembers = [
+    { id: 'u_sarah', name: 'Sarah Jenkins', role: 'Tech Lead', avatar: 'SJ', desc: 'Sets architecture directives & database choices' },
+    { id: 'u_cand_a', name: 'Candidate A', role: 'Sprint Developer', avatar: 'CA', desc: 'Claims coding tasks & implements modules' },
+    { id: 'u_cand_b', name: 'Candidate B', role: 'Backend Engineer', avatar: 'CB', desc: 'Tests collaborative token collision guard' },
+    { id: 'u_marcus', name: 'Marcus Chen', role: 'Product Manager', avatar: 'MC', desc: 'Manages deadlines & temporary sprint rules' },
+    { id: 'u_alex', name: 'Alex Rivera', role: 'Backend Lead', avatar: 'AR', desc: 'Microservices & caching policies' },
+    { id: 'u_elena', name: 'Elena Rostova', role: 'Frontend Dev', avatar: 'ER', desc: 'UI constraints & component standards' }
+  ];
+
+  const effectiveTeams = allTeams && allTeams.length > 0 ? allTeams : defaultTeams;
+  const effectiveMembers = teamMembers && teamMembers.length > 0 ? teamMembers : defaultMembers;
+
+  // Selected Login State
+  const [selectedTeamId, setSelectedTeamId] = useState(() => activeTeam?.id || effectiveTeams[0]?.id || 'ws_core');
+  const [selectedUserId, setSelectedUserId] = useState(() => activeUser?.id || 'u_cand_a');
+  const [isCustomUser, setIsCustomUser] = useState(false);
+  const [customUserName, setCustomUserName] = useState('');
+  const [customUserRole, setCustomUserRole] = useState('Fullstack Developer');
+
   const pageRef = useRef(null);
   const videoRef = useRef(null);
 
@@ -11,7 +46,7 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
   useEffect(() => {
     document.documentElement.classList.add('landing-active');
     document.body.classList.add('landing-active');
-    document.title = 'Vesper.ai — Operational AI Infrastructure';
+    document.title = 'SynapseMem — Memory-Powered Assistant & Token Guard';
 
     return () => {
       document.documentElement.classList.remove('landing-active');
@@ -43,7 +78,6 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
       el.addEventListener('animationend', handleAnimEnd, { once: true });
     });
 
-    // Double rAF fallback
     let raf1, raf2;
     raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
@@ -54,22 +88,20 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               el.classList.add('is-in');
             }
           } else {
-            // Older browser fallback
             el.classList.add('is-in');
           }
         });
       });
     });
 
-    // Escape key closes menu or modals
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setMenuOpen(false);
         setActiveModal(null);
+        setLoginModalOpen(false);
       }
     };
 
-    // Resize >=901px closes mobile menu
     const handleResize = () => {
       if (window.innerWidth >= 901) {
         setMenuOpen(false);
@@ -92,9 +124,43 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
     setActiveModal(section);
   };
 
+  const handleDoLogin = (e) => {
+    if (e) e.preventDefault();
+    const team = effectiveTeams.find((t) => t.id === selectedTeamId) || effectiveTeams[0];
+    let user = null;
+
+    if (isCustomUser && customUserName.trim()) {
+      user = {
+        id: `u_${Date.now()}`,
+        name: customUserName.trim(),
+        role: customUserRole.trim() || 'Software Engineer',
+        avatar: customUserName.trim().slice(0, 2).toUpperCase()
+      };
+    } else {
+      user = effectiveMembers.find((u) => u.id === selectedUserId) || effectiveMembers[0];
+    }
+
+    setLoginModalOpen(false);
+    if (onLogin) {
+      onLogin(team, user);
+    } else {
+      onEnterApp();
+    }
+  };
+
+  const handleQuickLogin = (userId, teamId = 'ws_core') => {
+    const team = effectiveTeams.find((t) => t.id === teamId) || effectiveTeams[0];
+    const user = effectiveMembers.find((u) => u.id === userId) || effectiveMembers[0];
+    if (onLogin) {
+      onLogin(team, user);
+    } else {
+      onEnterApp();
+    }
+  };
+
   return (
     <div ref={pageRef} className="landing-root">
-      {/* 4. Grain at z-index: 100 */}
+      {/* 1. Grain overlay */}
       <div className="grain" aria-hidden="true" />
 
       {/* 2. Hero photo background with video + scrim */}
@@ -127,7 +193,7 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
             href="#top"
             className="logo appear appear--scale"
             style={{ '--d': '0.08s' }}
-            aria-label="Vesper.ai"
+            aria-label="SynapseMem"
             onClick={(e) => {
               e.preventDefault();
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -135,8 +201,8 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
           >
             <svg
               className="logo-mark"
-              width="22"
-              height="22"
+              width="24"
+              height="24"
               viewBox="0 0 24 24"
               fill="currentColor"
               aria-hidden="true"
@@ -149,19 +215,19 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               </g>
             </svg>
             <span>
-              Vesper<span className="logo-suffix">.ai</span>
+              Synapse<span className="logo-suffix font-normal text-white/70">Mem</span>
             </span>
           </a>
 
-          {/* Center: Navigation Pills */}
+          {/* Center: Navigation Pills (Directly applicable to project!) */}
           <nav id="site-nav" className="nav" aria-label="Primary">
             <button
               type="button"
-              onClick={() => handleNavClick('benefits')}
+              onClick={() => handleNavClick('core-engine')}
               className="nav-pill appear appear--scale"
               style={{ '--d': '0.16s' }}
             >
-              Benefits
+              Core Engine
             </button>
             <button
               type="button"
@@ -173,19 +239,19 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
             </button>
             <button
               type="button"
-              onClick={() => handleNavClick('faqs')}
+              onClick={() => handleNavClick('token-guard')}
               className="nav-pill appear appear--scale"
               style={{ '--d': '0.40s' }}
             >
-              FAQs
+              Token Guard
             </button>
             <button
               type="button"
-              onClick={() => handleNavClick('pricing')}
+              onClick={() => handleNavClick('why-not-chat')}
               className="nav-pill appear appear--soft"
               style={{ '--d': '0.52s' }}
             >
-              Pricing
+              Why Not Chat?
             </button>
           </nav>
 
@@ -193,11 +259,11 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
           <div className="flex items-center gap-3 justify-self-end">
             <button
               type="button"
-              onClick={onEnterApp}
+              onClick={() => setLoginModalOpen(true)}
               className="btn btn-solid header-cta appear appear--scale"
               style={{ '--d': '0.34s' }}
             >
-              Start for Free
+              Sign In to Team
             </button>
 
             <button
@@ -231,16 +297,16 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               >
                 <path d="M12 2.6C12.55 2.6 12.88 3.15 13.08 4.7c.62 4.7 1.52 5.6 6.22 6.22 1.55.2 2.1.53 2.1 1.08s-.55.88-2.1 1.08c-4.7.62-5.6 1.52-6.22 6.22-.2 1.55-.53 2.1-1.08 2.1s-.88-.55-1.08-2.1c-.62-4.7-1.52-5.6-6.22-6.22C3.15 12.88 2.6 12.55 2.6 12s.55-.88 2.1-1.08c4.7-.62 5.6-1.52 6.22-6.22C11.12 3.15 11.45 2.6 12 2.6Z" />
               </svg>
-              <span>Operational AI Infrastructure</span>
+              <span>The Honest Memory Layer for Engineering Teams</span>
             </div>
 
             {/* H1 — 2 masked lines */}
             <h1 className="hero-headline">
               <span className="headline-line appear appear--mask" style={{ '--d': '0.42s' }}>
-                Train <em className="serif-agent">AI agents</em> on your
+                Never forget what your team
               </span>
               <span className="headline-line appear appear--mask" style={{ '--d': '0.62s' }}>
-                workflows in minutes.
+                decided in meetings & chats.
               </span>
             </h1>
 
@@ -249,18 +315,18 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               className="lede appear appear--soft"
               style={{ '--d': '0.82s', animationDuration: '1.25s' }}
             >
-              Deploy adaptive AI agents that learn, execute, and scale operational tasks across your business.
+              Standard chatbots forget everything or dump noisy, conflicting chat logs into prompts. SynapseMem captures structured decisions in real time, auto-supersedes outdated choices (&ldquo;actually, we&rsquo;re using Mongo&rdquo;), expires temporary deadlines (&ldquo;demo is Friday&rdquo;), and guards collaborative coding tokens so teammates never duplicate work.
             </p>
 
-            {/* Actions */}
+            {/* Primary Actions */}
             <div className="hero-actions">
               <button
                 type="button"
-                onClick={onEnterApp}
+                onClick={() => setLoginModalOpen(true)}
                 className="btn btn-solid hero-btn appear appear--btn"
                 style={{ '--d': '0.96s' }}
               >
-                Start for Free
+                Sign In to Workspace →
               </button>
               <button
                 type="button"
@@ -268,15 +334,63 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
                 className="btn btn-ghost-hero hero-btn appear appear--side"
                 style={{ '--d': '1.10s' }}
               >
-                See it in action
+                Interactive Walkthrough
+              </button>
+            </div>
+
+            {/* 1-Click Fast Identity Pill Bar for Candidates & Leads */}
+            <div
+              className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-center gap-2 text-xs text-neutral-300 appear appear--soft"
+              style={{ '--d': '1.18s' }}
+            >
+              <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold mr-1">
+                Instant Sign In:
+              </span>
+
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('u_cand_a', 'ws_sprint')}
+                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                title="Login as Candidate A (Sprint Dev)"
+              >
+                <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[9px] flex items-center justify-center">CA</span>
+                <span>Candidate A</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('u_cand_b', 'ws_sprint')}
+                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                title="Login as Candidate B (Token Guard Test)"
+              >
+                <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[9px] flex items-center justify-center">CB</span>
+                <span>Candidate B</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('u_sarah', 'ws_core')}
+                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                title="Login as Sarah Jenkins (Tech Lead)"
+              >
+                <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-[9px] flex items-center justify-center">SJ</span>
+                <span>Tech Lead</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLoginModalOpen(true)}
+                className="text-[11px] text-neutral-400 hover:text-white underline underline-offset-4 ml-1 transition"
+              >
+                More teams & users...
               </button>
             </div>
           </div>
         </main>
 
-        {/* Stats Footer — 3 columns */}
+        {/* Stats Footer — 3 columns with real project metrics */}
         <footer className="stats">
-          {/* Stat 1: Dual-pill / workflow icon */}
+          {/* Stat 1: Grounded Memory Record */}
           <div className="stat appear appear--stat" style={{ '--d': '1.12s' }}>
             <svg
               className="stat-icon"
@@ -287,23 +401,18 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               aria-hidden="true"
             >
               <defs>
-                <linearGradient id="pillGrad1" x1="3" y1="2" x2="14" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.38" />
-                  <stop offset="100%" stopColor="#3a3a3a" stopOpacity="0.62" />
-                </linearGradient>
-                <linearGradient id="pillGrad2" x1="13" y1="2" x2="24" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#3a3a3a" stopOpacity="0.38" />
-                  <stop offset="100%" stopColor="#ffffff" stopOpacity="0.62" />
+                <linearGradient id="memPillGrad1" x1="3" y1="2" x2="14" y2="22" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#3a3a3a" stopOpacity="0.6" />
                 </linearGradient>
               </defs>
-              <rect x="3.4" y="2.6" width="7.2" height="18.8" rx="3.6" fill="url(#pillGrad1)" />
-              <rect x="13.4" y="2.6" width="7.2" height="18.8" rx="3.6" fill="url(#pillGrad2)" />
-              <rect x="9.2" y="10.9" width="5.6" height="2.2" rx="1.1" fill="#4a4a4a" />
+              <rect x="3" y="4" width="18" height="16" rx="4" stroke="#ffffff" strokeWidth="1.6" />
+              <path d="M7 9h10M7 13h6" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
-            <span>4.2M+ workflows automated</span>
+            <span>100% Grounded Memory (Zero Chat Bloat)</span>
           </div>
 
-          {/* Stat 2: Download tile */}
+          {/* Stat 2: Honest Lifecycle & Superseding */}
           <div className="stat appear appear--stat" style={{ '--d': '1.28s' }}>
             <svg
               className="stat-icon"
@@ -313,88 +422,265 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               fill="none"
               aria-hidden="true"
             >
-              <rect x="2.4" y="2.4" width="19.2" height="19.2" rx="6.2" fill="#ffffff" />
-              <path d="M12 7.1v7.4" stroke="#111111" strokeWidth="1.85" strokeLinecap="round" />
-              <path
-                d="M8.15 12.35L12 16.2l3.85-3.85"
-                stroke="#111111"
-                strokeWidth="1.85"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <circle cx="12" cy="12" r="9" stroke="#ffffff" strokeWidth="1.6" />
+              <path d="M12 7v5l3 3" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
-            <span>92% reduction in manual operations</span>
+            <span>Honest Lifecycle (Auto-Superseding & Expiry)</span>
           </div>
 
-          {/* Stat 3: Three avatars */}
+          {/* Stat 3: Collaborative Token Collision Radar */}
           <div className="stat appear appear--stat" style={{ '--d': '1.44s' }}>
             <svg
-              className="stat-icon-wide"
-              width="38"
-              height="21"
-              viewBox="0 0 40 22"
+              className="stat-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
               fill="none"
               aria-hidden="true"
             >
-              {/* Avatar 1 */}
-              <circle cx="10.2" cy="11" r="9.2" fill="#2b2b2b" />
-              <path d="M7 3.5L8.5 6L6 6Z" fill="#2b2b2b" />
-              <path d="M13.4 3.5L14.4 6L11.9 6Z" fill="#2b2b2b" />
-              <ellipse cx="10.2" cy="12.1" rx="4.15" ry="3.7" fill="#f4f4f4" />
-              <circle cx="8.8" cy="11.5" r="0.7" fill="#1a1a1a" />
-              <circle cx="11.6" cy="11.5" r="0.7" fill="#1a1a1a" />
-
-              {/* Avatar 2 */}
-              <circle cx="20.2" cy="11" r="9.2" fill="#ffffff" />
-              <circle cx="17.7" cy="10" r="1.7" fill="#111111" />
-              <circle cx="22.7" cy="10" r="1.7" fill="#111111" />
-              <ellipse cx="20.2" cy="12.2" rx="1.2" ry="0.9" fill="#111111" />
-              <path
-                d="M17.8 14.2c1.2 1.3 3.6 1.3 4.8 0"
-                stroke="#111111"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-                fill="none"
-              />
-
-              {/* Avatar 3 */}
-              <circle cx="30.2" cy="11" r="9.2" fill="#f26b1d" />
-              <text
-                x="30.2"
-                y="15.1"
-                fontFamily="'Inter', sans-serif"
-                fontWeight="700"
-                fontSize="12.5"
-                fill="#ffffff"
-                textAnchor="middle"
-              >
-                e
-              </text>
+              <path d="M12 3a9 9 0 0 1 9 9 9 9 0 0 1-9 9 9 9 0 0 1-9-9 9 9 0 0 1 9-9Z" stroke="#ffffff" strokeWidth="1.6" />
+              <circle cx="12" cy="12" r="3" fill="#ffffff" />
+              <path d="M12 12l5-5" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
-            <span>180+ operational teams onboarded</span>
+            <span>Candidate Token Guard (Zero Redundant Work)</span>
           </div>
         </footer>
       </div>
 
-      {/* Liquid Glass Interactive Modal for Nav Links */}
+      {/* ======================================================== */}
+      {/* MODAL 1: TEAM & MEMBER LOGIN MODAL                       */}
+      {/* ======================================================== */}
+      {loginModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn"
+          onClick={() => setLoginModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl border border-white/20 bg-neutral-950/95 p-6 shadow-2xl relative text-left"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'linear-gradient(145deg, #121212 0%, #080808 100%)',
+              boxShadow: '0 25px 60px -10px rgba(0, 0, 0, 0.9), 0 0 40px rgba(255, 255, 255, 0.08)'
+            }}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white tracking-tight">
+                    Team & Developer Sign In
+                  </h3>
+                  <p className="text-[11px] text-neutral-400">
+                    Select your team workspace and developer identity to enter.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLoginModalOpen(false)}
+                className="text-neutral-400 hover:text-white text-lg px-2 py-1 rounded transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleDoLogin} className="py-4 space-y-4 text-xs">
+              {/* 1. Workspace Selection */}
+              <div>
+                <label className="block text-[11px] font-semibold text-neutral-300 uppercase tracking-wider mb-2">
+                  1. Team Workspace
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {effectiveTeams.map((team) => (
+                    <button
+                      key={team.id}
+                      type="button"
+                      onClick={() => setSelectedTeamId(team.id)}
+                      className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
+                        selectedTeamId === team.id
+                          ? 'border-white bg-white/15 text-white shadow-md'
+                          : 'border-white/10 bg-white/5 text-neutral-400 hover:border-white/25 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-white">{team.name}</span>
+                        {selectedTeamId === team.id && (
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-neutral-400 mt-1 line-clamp-1">
+                        {team.description || 'Workspace'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Developer Profile Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-semibold text-neutral-300 uppercase tracking-wider">
+                    2. Select Member Identity
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomUser(!isCustomUser)}
+                    className="text-[10px] text-neutral-400 hover:text-white underline"
+                  >
+                    {isCustomUser ? '← Choose standard member' : '+ Custom user name'}
+                  </button>
+                </div>
+
+                {!isCustomUser ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {effectiveMembers.map((member) => (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={() => setSelectedUserId(member.id)}
+                        className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2.5 ${
+                          selectedUserId === member.id
+                            ? 'border-white bg-white/15 text-white shadow-md'
+                            : 'border-white/10 bg-white/5 text-neutral-400 hover:border-white/25 hover:text-white'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                            selectedUserId === member.id
+                              ? 'bg-white text-black'
+                              : 'bg-white/10 text-neutral-300'
+                          }`}
+                        >
+                          {member.avatar || member.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="text-xs font-medium text-white truncate">{member.name}</div>
+                          <div className="text-[10px] text-neutral-400 truncate">{member.role}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-2">
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 mb-1">Your Full Name</label>
+                      <input
+                        type="text"
+                        value={customUserName}
+                        onChange={(e) => setCustomUserName(e.target.value)}
+                        placeholder="e.g. David Vance"
+                        className="w-full bg-black/60 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 mb-1">Your Role / Title</label>
+                      <input
+                        type="text"
+                        value={customUserRole}
+                        onChange={(e) => setCustomUserRole(e.target.value)}
+                        placeholder="e.g. Senior Backend Engineer"
+                        className="w-full bg-black/60 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Persona Suggestions */}
+              <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between flex-wrap gap-2 text-[11px] text-neutral-300">
+                <span className="text-neutral-400">Recommended for Testing:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTeamId('ws_sprint');
+                      setSelectedUserId('u_cand_a');
+                      setIsCustomUser(false);
+                    }}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white transition text-[10px]"
+                  >
+                    Candidate A
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTeamId('ws_sprint');
+                      setSelectedUserId('u_cand_b');
+                      setIsCustomUser(false);
+                    }}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white transition text-[10px]"
+                  >
+                    Candidate B (Token Guard)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTeamId('ws_core');
+                      setSelectedUserId('u_sarah');
+                      setIsCustomUser(false);
+                    }}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white transition text-[10px]"
+                  >
+                    Tech Lead (Sarah)
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setLoginModalOpen(false)}
+                  className="btn btn-ghost text-xs px-3 py-1.5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-solid text-xs px-5 py-2 flex items-center gap-2"
+                >
+                  <span>Enter Workspace</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 2: PROJECT DETAIL MODALS (APPLICABLE TO PROJECT!)  */}
+      {/* ======================================================== */}
       {activeModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
           onClick={() => setActiveModal(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-white/20 bg-neutral-950/95 p-6 shadow-2xl relative text-left"
+            className="w-full max-w-xl rounded-2xl border border-white/20 bg-neutral-950/95 p-6 shadow-2xl relative text-left"
             onClick={(e) => e.stopPropagation()}
             style={{
               background: 'linear-gradient(145deg, #111111 0%, #080808 100%)',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(255, 255, 255, 0.08)'
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 35px rgba(255, 255, 255, 0.08)'
             }}
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-white shadow-sm shadow-white/50" />
-                <h3 className="text-base font-semibold text-white tracking-tight capitalize">
-                  {activeModal === 'how-it-works' ? 'How Vesper.ai Works' : activeModal}
+                <h3 className="text-base font-semibold text-white tracking-tight">
+                  {activeModal === 'core-engine' && 'The 4 Pillars of Honest Team Memory'}
+                  {activeModal === 'how-it-works' && 'How SynapseMem Ingests & Grounds Memories'}
+                  {activeModal === 'token-guard' && 'Candidate Prompt Deduplication & Token Guard'}
+                  {activeModal === 'why-not-chat' && 'Why Not Just Paste Chat History in Prompts?'}
                 </h3>
               </div>
               <button
@@ -406,60 +692,111 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
               </button>
             </div>
 
-            <div className="py-4 text-sm text-neutral-300 space-y-3 leading-relaxed">
-              {activeModal === 'benefits' && (
+            <div className="py-4 text-xs sm:text-sm text-neutral-300 space-y-3 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+              {/* TAB 1: CORE ENGINE */}
+              {activeModal === 'core-engine' && (
                 <>
-                  <p>
-                    <strong className="text-white">Zero Memory Hallucination:</strong> Ground agent reasoning in MongoDB Atlas vector embeddings with temporal superseding and immutable decision ledgers.
-                  </p>
-                  <p>
-                    <strong className="text-white">Sub-100ms Atlas Vector Recall:</strong> Retrieve authoritative architectural constraints across team channels with multi-tenant privacy boundaries.
-                  </p>
-                  <p>
-                    <strong className="text-white">DPO & Consensus Alignment:</strong> Automatically steer models using Direct Preference Optimization pairs and multi-agent quorum voting.
-                  </p>
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <div className="text-white font-semibold flex items-center gap-1.5">
+                      <span className="text-emerald-400">1. Remembers</span> &mdash; Structured Decision Extraction
+                    </div>
+                    <p className="text-xs text-neutral-400">
+                      When someone writes <em>&ldquo;We&rsquo;re using Postgres because the team knows SQL&rdquo;</em>, SynapseMem extracts the structured memory tuple: <strong>Decision</strong> (&ldquo;We are using Postgres&rdquo;), <strong>Reason</strong> (&ldquo;Team knows SQL&rdquo;), <strong>Owner</strong> (Sarah Jenkins), and <strong>Date</strong>.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <div className="text-white font-semibold flex items-center gap-1.5">
+                      <span className="text-cyan-400">2. Recalls</span> &mdash; Grounded in Memory, Not Chat Logs
+                    </div>
+                    <p className="text-xs text-neutral-400">
+                      Weeks later, asking <em>&ldquo;What database are we using and why?&rdquo;</em> answers directly from stored memory vectors. It never replays noisy chat history into the LLM context.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <div className="text-white font-semibold flex items-center gap-1.5">
+                      <span className="text-amber-400">3. Keeps Memory Honest</span> &mdash; Superseding & Expiry
+                    </div>
+                    <p className="text-xs text-neutral-400">
+                      When someone says <em>&ldquo;Actually, we are switching to MongoDB&rdquo;</em>, the old Postgres memory is flagged as <code>SUPERSEDED</code> with bidirectional links. Short-lived assumptions like <em>&ldquo;demo is on Friday&rdquo;</em> automatically expire once that date passes.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <div className="text-white font-semibold flex items-center gap-1.5">
+                      <span className="text-purple-400">4. Explains Itself</span> &mdash; Transparent Inspect Panel
+                    </div>
+                    <p className="text-xs text-neutral-400">
+                      An Inspect drawer reveals exact cosine similarity scores, applied filters, and memory records utilized for every answer.
+                    </p>
+                  </div>
                 </>
               )}
 
+              {/* TAB 2: HOW IT WORKS */}
               {activeModal === 'how-it-works' && (
                 <>
                   <p>
-                    1. <strong className="text-white">Ingest & Structure:</strong> Engineering decisions communicated in Slack/Discord channels are extracted, normalized, and embedded into 1024D vectors.
+                    1. <strong className="text-white">Continuous Ingestion:</strong> Conversations in channels (like <code>#architecture</code> or <code>#sprint-planning</code>) are scanned for technical decisions, constraints, and time commitments.
                   </p>
                   <p>
-                    2. <strong className="text-white">Detect Conflicts & Supersede:</strong> When new directives arrive (e.g. "We will use DynamoDB instead of MongoDB"), older records are flagged as superseded with complete lineage graphs.
+                    2. <strong className="text-white">Semantic Vector Indexing:</strong> Each extracted memory is projected into high-dimensional vector space with hybrid BM25 lexical weighting for exact keyword matches and conceptual synonyms.
                   </p>
                   <p>
-                    3. <strong className="text-white">Live Grounding:</strong> Questions asked to Gemini 3 Flash or Claude 3.5 Sonnet inject strictly grounded active decisions with zero hallucination.
+                    3. <strong className="text-white">Conflict Arbitration:</strong> When a contradictory directive is posted, the Conflict Arbiter traces memory lineages, flags the superseded record, and ensures future prompts only reference current authoritative facts.
+                  </p>
+                  <p>
+                    4. <strong className="text-white">Zero-Hallucination Recall:</strong> When queried in <code>#ask-assistant</code> or 1-on-1 Chatbot mode, candidate prompts are answered with citations to specific memory records.
                   </p>
                 </>
               )}
 
-              {activeModal === 'faqs' && (
+              {/* TAB 3: TOKEN GUARD */}
+              {activeModal === 'token-guard' && (
                 <>
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs">
+                    ⚡ <strong>The Collaborative Coding Problem:</strong> When teammates or hackathon candidates code simultaneously, Candidate A and Candidate B routinely submit duplicate prompt requests (e.g. &ldquo;Create MongoDB connection pool in src/db/pool.js&rdquo;), burning 3,000+ tokens each.
+                  </div>
                   <p>
-                    <strong className="text-white">Q: Does this require fine-tuning?</strong><br />
-                    No. Vesper.ai operates at the memory infrastructure layer via MongoDB Atlas Vector Search, with optional DPO alignment export.
+                    <strong className="text-white">How Candidate Radar Works:</strong>
                   </p>
-                  <p>
-                    <strong className="text-white">Q: What models are supported?</strong><br />
-                    Google Gemini 3 Flash, Gemini 3.1 Flash Lite, Anthropic Claude 3.5 Sonnet, and our built-in local deterministic grounding engine.
-                  </p>
-                  <p>
-                    <strong className="text-white">Q: Can team decisions expire?</strong><br />
-                    Yes. Time-bound decisions utilize MongoDB Atlas TTL indexes to automatically sunset after their expiration date.
-                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-xs text-neutral-300">
+                    <li>Candidate A claims a task or sends a coding prompt. The task is logged with vector embeddings and affected target files.</li>
+                    <li>Candidate B later submits a prompt for the same component. Token Guard calculates semantic similarity.</li>
+                    <li>If overlap exceeds 70%, Token Guard intercepts Candidate B, alerts them that Candidate A is already handling this task, and allows Candidate B to adopt the code or claim a non-overlapping task.</li>
+                    <li><strong>Result:</strong> Saves thousands of LLM tokens and prevents diverging implementations.</li>
+                  </ul>
                 </>
               )}
 
-              {activeModal === 'pricing' && (
+              {/* TAB 4: WHY NOT CHAT HISTORY? */}
+              {activeModal === 'why-not-chat' && (
                 <>
-                  <p>
-                    <strong className="text-white">Hackathon Free Tier:</strong> Full access to SynapseMem 2.0 operational console, Atlas Vector Search engine, Consensus Quorum, and DPO training export.
+                  <p className="text-xs text-neutral-300">
+                    Why can&rsquo;t teams just paste old chat history into the LLM system prompt?
                   </p>
-                  <p className="text-xs text-neutral-400">
-                    Enterprise tier includes dedicated Atlas clusters, custom VPC peering, and multi-region replication.
-                  </p>
+                  <div className="space-y-2 mt-2">
+                    <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-800/30 text-neutral-300">
+                      <strong className="text-red-300 block mb-1">❌ Raw Chat History Injection:</strong>
+                      <ul className="list-disc list-inside text-xs space-y-0.5 text-neutral-400">
+                        <li>Explodes context windows ($$$ token waste and high latency).</li>
+                        <li>Injects conflicting directives (&ldquo;Postgres&rdquo; vs &ldquo;Mongo&rdquo; mentioned across 500 lines).</li>
+                        <li>Cannot determine when assumptions (e.g. &ldquo;demo Friday&rdquo;) have expired.</li>
+                        <li>No auditability or explainability of why an answer was chosen.</li>
+                      </ul>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800/30 text-neutral-300">
+                      <strong className="text-emerald-300 block mb-1">✔ SynapseMem Structured Vector Memory:</strong>
+                      <ul className="list-disc list-inside text-xs space-y-0.5 text-neutral-400">
+                        <li>Only authoritative, active decisions are recalled (constant low token cost).</li>
+                        <li>Superseded decisions are marked and excluded automatically.</li>
+                        <li>Temporal expiry handles time-bound assumptions cleanly.</li>
+                        <li>Complete Inspect Drawer showing similarity scores and citations.</li>
+                      </ul>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -476,11 +813,11 @@ export default function LandingPage({ onEnterApp, onEnterDemo }) {
                 type="button"
                 onClick={() => {
                   setActiveModal(null);
-                  onEnterApp();
+                  setLoginModalOpen(true);
                 }}
                 className="btn btn-solid text-xs px-4 py-2"
               >
-                Launch Console →
+                Sign In to Workspace →
               </button>
             </div>
           </div>
