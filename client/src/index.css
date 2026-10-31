@@ -208,3 +208,40 @@
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
   cursor: grab;
 }
+
+
+/* --- Sidebar label CSS transition system ---
+   Labels stay in the DOM at all times. .is-expanded/.is-collapsed on the
+   container drives visibility via opacity + max-width so the slide animation
+   and label fade are perfectly in sync without React mount/unmount flash.
+*/
+.sidebar-label {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  display: inline-block;
+  vertical-align: middle;
+  transition: opacity 0.20s ease, max-width 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-sidebar-container.is-expanded .sidebar-label {
+  opacity: 1;
+  max-width: 220px;
+  pointer-events: auto;
+}
+
+.sidebar-section-label {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-sidebar-container.is-expanded .sidebar-section-label {
+  opacity: 1;
+  max-height: 40px;
+  pointer-events: auto;
+}

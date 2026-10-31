@@ -79,7 +79,7 @@ export default function AppSidebar({
       onMouseEnter={handleSidebarMouseEnter}
       onMouseLeave={handleSidebarMouseLeave}
     >
-      <div className="w-[260px] h-full flex flex-col justify-between bg-[#050505] shrink-0">
+      <div className="w-full h-full flex flex-col justify-between bg-[#050505] shrink-0 overflow-hidden">
         {/* Top: Header & Primary Navigation */}
         <div className="flex flex-col overflow-y-auto no-scrollbar flex-1">
           {/* Workspace Switcher Header */}
@@ -99,13 +99,10 @@ export default function AppSidebar({
                   </g>
                 </svg>
               </div>
-              {isExpanded && (
-                <div className="truncate">
+              <div className="sidebar-label truncate">
                   <div className="text-xs font-semibold text-white truncate">{activeTeam?.name || "Atlas Core Engineers"}</div>
                   <div className="text-[10px] text-neutral-500">Workspace</div>
-                </div>
-              )}
-            </div>
+                </div>            </div>
 
             {isExpanded && (
               <button
@@ -124,12 +121,10 @@ export default function AppSidebar({
 
           {/* Primary View Navigation */}
           <div className="p-2 space-y-1 border-b border-white/10">
-            {isExpanded && (
-              <div className="px-2 pt-1 pb-1.5 text-[9px] font-bold text-neutral-500 uppercase tracking-wider flex items-center justify-between">
+            <div className="sidebar-section-label px-2 pt-1 pb-1.5 text-[9px] font-bold text-neutral-500 uppercase tracking-wider flex items-center justify-between">
                 <span>Core Windows</span>
                 <span className="text-[9px] text-neutral-500 font-mono">v2.0</span>
               </div>
-            )}
 
             {/* Chatbot Tab */}
             <button
@@ -143,15 +138,11 @@ export default function AppSidebar({
             >
               <div className="flex items-center gap-2.5 truncate">
                 <Bot className={`w-4 h-4 shrink-0 ${activeTab === 'chat' ? 'text-black' : 'text-neutral-400'}`} />
-                {isExpanded && <span className="truncate">Chatbot</span>}
+                <span className="sidebar-label truncate">Chatbot</span>
               </div>
-              {isExpanded && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+              <span className={`sidebar-label text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
                   activeTab === 'chat' ? 'bg-black text-white' : 'bg-white/10 text-neutral-300'
-                }`}>
-                  Recall
-                </span>
-              )}
+                }`}>Recall</span>
             </button>
 
             {/* Memory Ledger Tab */}
@@ -166,15 +157,11 @@ export default function AppSidebar({
             >
               <div className="flex items-center gap-2.5 truncate">
                 <Database className={`w-4 h-4 shrink-0 ${activeTab === 'ledger' ? 'text-black' : 'text-neutral-400'}`} />
-                {isExpanded && <span className="truncate">Memory Ledger</span>}
+                <span className="sidebar-label truncate">Memory Ledger</span>
               </div>
-              {isExpanded && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`sidebar-label text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   activeTab === 'ledger' ? 'bg-black text-white' : 'bg-white/10 text-neutral-300'
-                }`}>
-                  {memories.length}
-                </span>
-              )}
+                }`}>{memories.length}</span>
             </button>
 
             {/* Training & DPO Tab */}
@@ -189,15 +176,11 @@ export default function AppSidebar({
             >
               <div className="flex items-center gap-2.5 truncate">
                 <GraduationCap className={`w-4 h-4 shrink-0 ${activeTab === 'training' ? 'text-black' : 'text-neutral-400'}`} />
-                {isExpanded && <span className="truncate">Training & DPO</span>}
+                <span className="sidebar-label truncate">Training & DPO</span>
               </div>
-              {isExpanded && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`sidebar-label text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   activeTab === 'training' ? 'bg-black text-white' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                }`}>
-                  {trainingStats.dpoPairsCount || 0}
-                </span>
-              )}
+                }`}>{trainingStats.dpoPairsCount || 0}</span>
             </button>
 
             {/* Consensus Quorum Tab */}
@@ -212,15 +195,11 @@ export default function AppSidebar({
             >
               <div className="flex items-center gap-2.5 truncate">
                 <Vote className={`w-4 h-4 shrink-0 ${activeTab === 'consensus' ? 'text-black' : 'text-neutral-400'}`} />
-                {isExpanded && <span className="truncate">Consensus Quorum</span>}
+                <span className="sidebar-label truncate">Consensus Quorum</span>
               </div>
-              {isExpanded && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`sidebar-label text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   activeTab === 'consensus' ? 'bg-black text-white' : 'bg-purple-950 text-purple-300 border border-purple-800'
-                }`}>
-                  {consensusStats.ratifiedCount || 0}
-                </span>
-              )}
+                }`}>{consensusStats.ratifiedCount || 0}</span>
             </button>
           </div>
 
@@ -401,11 +380,9 @@ export default function AppSidebar({
 
           {/* Operational Tools & Diagnostics */}
           <div className="p-2 space-y-1">
-            {isExpanded && (
-              <div className="px-2 pt-1 pb-1 text-[9px] font-bold text-neutral-500 uppercase tracking-wider">
+            <div className="sidebar-section-label px-2 pt-1 pb-1 text-[9px] font-bold text-neutral-500 uppercase tracking-wider">
                 <span>Tools & Operations</span>
               </div>
-            )}
 
             <button
               onClick={onRunGuidedDemo}
@@ -413,7 +390,7 @@ export default function AppSidebar({
               title="Run 5-Step Architecture Verification Demo"
             >
               <PlayCircle className="w-3.5 h-3.5 text-white shrink-0" />
-              {isExpanded && <span>Guided Demo</span>}
+              <span className="sidebar-label">Guided Demo</span>
             </button>
 
             <button
@@ -423,11 +400,9 @@ export default function AppSidebar({
             >
               <div className="flex items-center gap-2.5">
                 <Radio className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                {isExpanded && <span>Live Sync Stream</span>}
+                <span className="sidebar-label">Live Sync Stream</span>
               </div>
-              {isExpanded && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              )}
+              <span className="sidebar-label w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             </button>
 
             <button
@@ -436,7 +411,7 @@ export default function AppSidebar({
               title="Scientific Live Benchmark vs Naive RAG"
             >
               <BarChart2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              {isExpanded && <span>Benchmark Matrix</span>}
+              <span className="sidebar-label">Benchmark Matrix</span>
             </button>
 
             <button
@@ -445,7 +420,7 @@ export default function AppSidebar({
               title="Temporal Time Machine & TTL Simulator"
             >
               <History className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              {isExpanded && <span>Time Machine</span>}
+              <span className="sidebar-label">Time Machine</span>
             </button>
 
             <button
@@ -454,7 +429,7 @@ export default function AppSidebar({
               title="Inspect 1024D Voyage Vectors"
             >
               <ScanEye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              {isExpanded && <span>{inspectOpen ? 'Close Inspector' : 'Vector Inspector'}</span>}
+              <span className="sidebar-label">{inspectOpen ? 'Close Inspector' : 'Vector Inspector'}</span>
             </button>
 
             <button
@@ -463,7 +438,7 @@ export default function AppSidebar({
               title="Autonomous GitHub Repo Onboarding & PR Guardian"
             >
               <GitPullRequest className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              {isExpanded && <span>GitHub Guardian PR</span>}
+              <span className="sidebar-label">GitHub Guardian PR</span>
             </button>
 
             <button
@@ -473,7 +448,7 @@ export default function AppSidebar({
               title="Download formatted ADR Markdown Dossier"
             >
               <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              {isExpanded && <span>{isExportingDossier ? 'Exporting...' : 'Export ADR Dossier'}</span>}
+              <span className="sidebar-label">{isExportingDossier ? 'Exporting...' : 'Export ADR Dossier'}</span>
             </button>
 
             <button
@@ -482,7 +457,7 @@ export default function AppSidebar({
               title="Re-seed clean architectural directives"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              {isExpanded && <span>Reset Baseline</span>}
+              <span className="sidebar-label">Reset Baseline</span>
             </button>
           </div>
         </div>
@@ -529,32 +504,23 @@ export default function AppSidebar({
               <div className="w-7 h-7 rounded-full bg-white text-black font-bold flex items-center justify-center text-xs shadow shrink-0">
                 {activeUser?.avatar || 'U'}
               </div>
-              {isExpanded && (
-                <div className="truncate text-left">
-                  <div className="text-xs font-semibold text-neutral-200 truncate leading-tight">
-                    {activeUser?.name || 'Developer'}
-                  </div>
-                  <div className="text-[10px] text-neutral-400 truncate leading-tight">
-                    {activeUser?.role || 'Member'}
-                  </div>
+              <div className="sidebar-label truncate text-left">
+                  <div className="text-xs font-semibold text-neutral-200 truncate leading-tight">{activeUser?.name || 'Developer'}</div>
+                  <div className="text-[10px] text-neutral-400 truncate leading-tight">{activeUser?.role || 'Member'}</div>
                 </div>
-              )}
             </div>
 
-            {isExpanded && (
-              <button
+            <button
                 onClick={onLogout}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-rose-300 transition"
+                className="sidebar-label p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-rose-300 transition"
                 title="Log Out / Switch Account"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
-            )}
           </div>
 
           {/* Pin / Collapse Slider Toggle Button */}
-          {isExpanded && (
-            <div className="pt-1 border-t border-white/5 flex items-center justify-between text-[10px] text-neutral-500 font-mono">
+          <div className="sidebar-label pt-1 border-t border-white/5 flex items-center justify-between text-[10px] text-neutral-500 font-mono">
               <span>{sidebarPinned ? 'Sidebar Locked' : 'Auto-Collapse'}</span>
               <button
                 onClick={() => setSidebarPinned(!sidebarPinned)}
@@ -563,7 +529,6 @@ export default function AppSidebar({
                 {sidebarPinned ? 'Auto-hide' : 'Pin Open'}
               </button>
             </div>
-          )}
         </div>
       </div>
     </aside>

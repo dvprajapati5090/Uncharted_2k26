@@ -171,7 +171,7 @@ export default function App() {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => {
       setSidebarHovered(false);
-    }, 220);
+    }, 400);
   };
   const [operationsMenuOpen, setOperationsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'ledger' | 'training'
