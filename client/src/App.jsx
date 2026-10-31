@@ -937,13 +937,13 @@ export default function App() {
   };
 
   const handleWipeData = async () => {
-    if (!confirm('Wipe and reset all memory & message stores to clean baseline?')) return;
+    if (!confirm('Reset memory ledger and messages back to clean foundational baseline?')) return;
     try {
-      await fetch('/api/wipe', { method: 'POST' });
+      await fetch('/api/demo/seed', { method: 'POST' });
       await handleTimeTravel(0); // reset clock to Oct 30, 2026
-      showToast('All memories and messages reset successfully.', 'warning');
-      loadMemories();
-      loadMessages();
+      showToast('Memory ledger reset to foundational baseline.', 'success');
+      await loadMemories();
+      await loadMessages();
     } catch (err) {
       showToast('Reset failed', 'error');
     }

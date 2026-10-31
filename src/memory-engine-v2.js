@@ -253,29 +253,35 @@ export async function handleSuperseding(newMemory) {
   });
 
   const newText = ((newMemory.content?.statement || '') + ' ' + (newMemory.source?.excerpt || '')).toLowerCase();
-  const isSwitchSignal = /switch|switching|actually|now approved|approved|changed|extend|reschedule|update/i.test(newText);
+  const isSwitchSignal = /switch|switching|actually|now approved|approved|changed|extend|reschedule|update|instead of|replace|replacing|migrat(?:e|ing|ion)|moving to|move to|transition|prefer|standardiz(?:e|ing)|will be using|adopt(?:ing|ed)?/i.test(newText);
 
   let lastSuperseded = null;
 
   for (const existing of activeMemories) {
     if (existing._id.toString() === newMemory._id.toString()) continue;
 
-    // Same topic conflict
+    const existingText = (existing.content?.statement || '').toLowerCase();
     const sameTopic = existing.topic.toLowerCase() === newMemory.topic.toLowerCase();
     
     // Redis approval superseding prior Redis restriction
     const isRedisTransition = existing.topic === 'Infrastructure' &&
-      existing.content.statement.toLowerCase().includes('redis') &&
+      existingText.includes('redis') &&
       newText.includes('redis');
 
-    // Database switch
-    const isDbSwitch = existing.topic === 'Database' && isSwitchSignal;
+    // Database switch (e.g. DynamoDB instead of MongoDB, or any new database directive)
+    const isDbSwitch = (existing.topic === 'Database' && newMemory.topic === 'Database') ||
+      (existing.topic === 'Database' && isSwitchSignal) ||
+      (/mongo|dynamodb|postgres|sql|database|db/i.test(existingText) && /mongo|dynamodb|postgres|sql|database|db/i.test(newText) && isSwitchSignal);
+
+    // Frontend switch
+    const isFrontendSwitch = (existing.topic === 'Frontend' && newMemory.topic === 'Frontend') ||
+      (/react|vue|angular|svelte|next/i.test(existingText) && /react|vue|angular|svelte|next/i.test(newText));
 
     // Deployment freeze update / rescheduling (a new deployment freeze replaces any prior active deployment freeze)
     const isDeploymentUpdate = (existing.topic === 'Deployment' && newMemory.topic === 'Deployment') ||
-      (/freeze|deployment/i.test(existing.content?.statement || '') && /freeze|deployment/i.test(newText));
+      (/freeze|deployment/i.test(existingText) && /freeze|deployment/i.test(newText));
 
-    if (isRedisTransition || isDeploymentUpdate || (sameTopic && isSwitchSignal) || isDbSwitch) {
+    if (isRedisTransition || isDeploymentUpdate || isDbSwitch || isFrontendSwitch || (sameTopic && isSwitchSignal)) {
       const now = getAppNow();
       await updateMemoryDocument(existing._id, {
         status: 'superseded',

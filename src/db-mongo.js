@@ -24,7 +24,8 @@ const memoryStore = {
 /**
  * Initializes connection to MongoDB Atlas or initializes resilient in-memory replica
  */
-export async function initMongo() {
+export async function initMongo(customDbName = null) {
+  const targetDbName = customDbName || config.mongodb.dbName;
   if (isConnected && db) return db;
 
   const uri = config.mongodb.uri;
@@ -42,9 +43,9 @@ export async function initMongo() {
     });
 
     await client.connect();
-    db = client.db(config.mongodb.dbName);
+    db = client.db(targetDbName);
     isConnected = true;
-    console.log(`[MongoDB] Connected successfully to Atlas database: "${config.mongodb.dbName}"`);
+    console.log(`[MongoDB] Connected successfully to Atlas database: "${targetDbName}"`);
 
     await setupIndexes(db);
     await realtimeSync.init(db, config.mongodb.memoriesCollection);
