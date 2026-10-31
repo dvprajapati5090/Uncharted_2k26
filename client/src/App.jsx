@@ -91,7 +91,7 @@ export default function App() {
   const [consensusProposalText, setConsensusProposalText] = useState('');
   const [evaluatingConsensus, setEvaluatingConsensus] = useState(false);
   const [activeEvaluatedProposal, setActiveEvaluatedProposal] = useState(null);
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
   const [llmModalOpen, setLlmModalOpen] = useState(false);
   const [geminiKeyInput, setGeminiKeyInput] = useState(() => {
     try { return localStorage.getItem('synapse_gemini_key') || ''; } catch (_) { return ''; }
@@ -737,7 +737,7 @@ export default function App() {
       const tempAsstMsg = {
         id: tempAsstId,
         channel: currentChannel,
-        sender: `SynapseMem 2.0 (${selectedModel.includes('gemini') ? 'Gemini 2.5' : selectedModel.includes('claude') ? 'Claude 3.5' : 'Atlas Vector'})`,
+        sender: `SynapseMem 2.0 (${selectedModel.includes('flash') ? 'Gemini 3.8 Flash' : selectedModel.includes('gemini') ? 'Gemini 3.1' : selectedModel.includes('claude') ? 'Claude 3.5' : 'Atlas Vector'})`,
         text: '',
         is_assistant: true,
         timestamp: new Date().toISOString(),
@@ -1203,8 +1203,8 @@ export default function App() {
                           onChange={(e) => setSelectedModel(e.target.value)}
                           className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer text-xs"
                         >
-                          <option value="gemini-2.5-flash" className="bg-slate-900 text-slate-200">⚡ Gemini 2.5 Flash</option>
-                          <option value="gemini-1.5-pro" className="bg-slate-900 text-slate-200">🧠 Gemini 1.5 Pro</option>
+                          <option value="gemini-3-flash-preview" className="bg-slate-900 text-slate-200">⚡ Gemini 3 Flash</option>
+                          <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-slate-200">⚡ Gemini 3.1 Flash Lite</option>
                           <option value="claude-3-5-sonnet" className="bg-slate-900 text-slate-200">🔮 Claude 3.5 Sonnet</option>
                           <option value="local-grounded" className="bg-slate-900 text-slate-200">⚙️ Local Atlas Engine</option>
                         </select>

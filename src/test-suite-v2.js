@@ -76,7 +76,8 @@ await extractAndFormMemory({
 const recallRes = await recallMemories({
   query: 'Design a background job system for scheduled notifications.',
   user: userA,
-  workspaceId: 'ws_core'
+  workspaceId: 'ws_core',
+  model: 'local-grounded'
 });
 
 console.log('Agent Answer (With Memory):', recallRes.answer);
@@ -102,7 +103,8 @@ assert(res3.superseded !== null, 'Previous Redis constraint must be marked super
 const recallAfterApproval = await recallMemories({
   query: 'Can we use Redis for our caching layer?',
   user: userA,
-  workspaceId: 'ws_core'
+  workspaceId: 'ws_core',
+  model: 'local-grounded'
 });
 console.log('Recall after approval:', recallAfterApproval.answer);
 assert(recallAfterApproval.answer.includes('approved Redis'), 'Answer must reflect new active decision');
@@ -126,7 +128,8 @@ setSimulatedTime('2026-11-06T10:00:00.000Z');
 const recallExpired = await recallMemories({
   query: 'Are there any active deployment freeze rules?',
   user: userA,
-  workspaceId: 'ws_core'
+  workspaceId: 'ws_core',
+  model: 'local-grounded'
 });
 console.log('Recall after expiry date:', recallExpired.answer);
 const expiredMem = await getMemoryById(deadlineRes.extracted._id);
