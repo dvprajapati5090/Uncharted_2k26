@@ -134,27 +134,46 @@ export async function extractAndFormMemory({
     return { extracted: null, reason: 'Questions and queries are not architectural decisions or constraints.' };
   }
 
-  const isDecision = /we(?:'re| are) using|decided (?:to|on)|switching to|settled on|will use|\bwe use\b|approved|now approved/i.test(text);
-  const isConstraint = /do not|cannot|must not|prohibited|without approval|no production|\bfreeze\b/i.test(text);
-  const isPreference = /prefer|preference|we prefer|should be written in/i.test(text);
+  // 1. Constraint Detection (Negative boundary or prohibition)
+  const isConstraint = /\b(?:do\s+not|don't|cannot|can't|must\s+not|should\s+not|never|prohibit(?:ed)?|forbidden|not\s+allowed|no\s+production|without\s+approval|freeze|block(?:ed)?|restrict(?:ed)?|avoid)\b/i.test(text);
+
+  // 2. Preference Detection (Developer or individual preference)
+  const isPreference = /\b(?:prefer|preference|we\s+prefer|favour|favor|like\s+to|better\s+to|best\s+to|should\s+be\s+written\s+in)\b/i.test(text);
+
+  // 3. Technical Stack / Architectural Keywords
+  const hasTechnicalKeyword = /\b(?:react|vue|angular|svelte|nextjs|next\.js|node|express|fastapi|django|flask|spring|python|golang|go|rust|java|mongodb|mongo|postgres|postgresql|mysql|sqlite|redis|kafka|rabbitmq|bullmq|celery|docker|kubernetes|k8s|aws|gcp|azure|tailwind|graphql|rest|grpc|jwt|oauth|caching|cache|database|db|frontend|backend|ui|microservice|monolith|orm|prisma|mongoose|tool|tooling|stack|framework|library)\b/i.test(text);
+
+  // 4. Decision Action Verbs & Structural Declarations
+  const hasDecisionVerbs = /\b(?:will\s+be\s+using|will\s+use|are\s+using|we(?:'re|\s+are)?\s+using|using|we\s+use|use|adopt(?:ing|ed)?|standardiz(?:e|ing|ed)|settl(?:ed?|ing)\s+on|switch(?:ing|ed)?\s+to|migrat(?:e|ing|ed)\s+to|chose|chosen|choose|choosing|select(?:ed|ing)?|picked|deploy(?:ing|ed)?|built\s+with|build\s+with|going\s+with|relying\s+on|approved|now\s+approved|agreed\s+on|mandate|standard|choice|policy|rule)\b/i.test(text);
+
+  const hasStructuralAssertion = /\b(?:as\s+our|as\s+out|is\s+our|is\s+the|for\s+(?:our|this)\s+project|our\s+frontend|our\s+backend|our\s+database|our\s+stack|our\s+choice|frontend\s+tool|backend\s+tool|database\s+tool)\b/i.test(text);
+
+  const isDecision = isConstraint ? false : (
+    (hasDecisionVerbs && (hasTechnicalKeyword || hasStructuralAssertion)) ||
+    (hasStructuralAssertion && hasTechnicalKeyword) ||
+    ((channel === 'architecture' || channel === 'sprint-planning') && (hasTechnicalKeyword || hasDecisionVerbs) && text.trim().length >= 15) ||
+    /\bwe(?:'re| are) using|decided (?:to|on)|switching to|settled on|will use|\bwe use\b|approved|now approved/i.test(text)
+  );
 
   if (!isDecision && !isConstraint && !isPreference) {
-    return { extracted: null };
+    return { extracted: null, reason: 'No architectural directive or constraint pattern identified.' };
   }
 
   const type = isConstraint ? 'constraint' : (isPreference ? 'preference' : 'decision');
   const temporal = parseTemporalValidity(text);
 
   let topic = 'Architecture';
-  if (/redis|cache|caching/i.test(text)) topic = 'Infrastructure';
-  else if (/database|postgres|mongo|sql|nosql/i.test(text)) topic = 'Database';
-  else if (/deploy|production|freeze/i.test(text)) topic = 'Deployment';
-  else if (/frontend|react|tailwind/i.test(text)) topic = 'Frontend';
+  if (/redis|cache|caching|queue|bullmq|celery|kafka|rabbitmq|broker/i.test(text)) topic = 'Infrastructure';
+  else if (/database|postgres|mongo|sql|nosql|dynamodb|db/i.test(text)) topic = 'Database';
+  else if (/deploy|production|freeze|release|pipeline|ci\/cd|docker|container|kubernetes|k8s/i.test(text)) topic = 'Deployment';
+  else if (/frontend|react|vue|svelte|angular|next|tailwind|css|ui/i.test(text)) topic = 'Frontend';
+  else if (/jwt|auth|oauth|security|token|sanitiz|port|firewall|permission|secret/i.test(text)) topic = 'Security';
+  else if (/backend|api|fastapi|express|rest|grpc|service/i.test(text)) topic = 'Backend';
 
   // Statement & reason parsing
   let statement = text;
   let reason = '';
-  const reasonMatch = text.match(/\b(?:because|due to|since|as)\b\s*(.*)$/i);
+  const reasonMatch = text.match(/\b(?:because|due to|since|in order to)\b\s*(.*)$/i);
   if (reasonMatch) {
     reason = reasonMatch[1].trim();
     statement = text.slice(0, reasonMatch.index).trim();
