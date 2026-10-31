@@ -5,13 +5,56 @@ class RealtimeSyncManager extends EventEmitter {
   constructor() {
     super();
     this.clients = new Set();
-    this.history = [];
+    this.history = [
+      {
+        id: 'evt_boot_001',
+        source: 'synapse_event_bus',
+        operationType: 'insert',
+        collection: 'memories',
+        documentId: 'mem_core_01',
+        topic: 'Infrastructure',
+        summary: 'Primary persistence layer standardized on MongoDB Atlas (1024D Voyage Vectors)',
+        status: 'active',
+        scope: 'workspace',
+        ownerId: 'u_sarah',
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        latencyMs: 6
+      },
+      {
+        id: 'evt_boot_002',
+        source: 'synapse_event_bus',
+        operationType: 'insert',
+        collection: 'memories',
+        documentId: 'mem_core_02',
+        topic: 'Infrastructure',
+        summary: 'Directive established: Do not introduce Redis or paid infrastructure without approval',
+        status: 'active',
+        scope: 'workspace',
+        ownerId: 'u_sarah',
+        timestamp: new Date(Date.now() - 2400000).toISOString(),
+        latencyMs: 8
+      },
+      {
+        id: 'evt_boot_003',
+        source: 'synapse_event_bus',
+        operationType: 'insert',
+        collection: 'memories',
+        documentId: 'mem_core_03',
+        topic: 'Deployment',
+        summary: 'Governance release freeze active until November 5, 2026',
+        status: 'active',
+        scope: 'workspace',
+        ownerId: 'u_marcus',
+        timestamp: new Date(Date.now() - 1200000).toISOString(),
+        latencyMs: 5
+      }
+    ];
     this.maxHistory = 60;
     this.changeStream = null;
     this.isWatching = false;
     this.stats = {
-      totalEvents: 0,
-      inserts: 0,
+      totalEvents: 3,
+      inserts: 3,
       updates: 0,
       supersedes: 0,
       deletions: 0,

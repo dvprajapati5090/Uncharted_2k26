@@ -2,10 +2,17 @@ import { config } from '../config.js';
 
 export const AVAILABLE_MODELS = [
   {
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash (Production)',
+    provider: 'gemini',
+    description: 'Ultra-fast production model with native Atlas grounding.',
+    badge: 'Google DeepMind'
+  },
+  {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     provider: 'gemini',
-    description: 'Ultra-fast, state-of-the-art Google DeepMind reasoning model with native grounding support.',
+    description: 'State-of-the-art Google DeepMind reasoning model with native grounding support.',
     badge: 'Google DeepMind'
   },
   {
@@ -93,12 +100,13 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
   }
 
   const modelMap = {
-    'gemini-2.5-flash': 'gemini-2.5-flash',
+    'gemini-2.5-flash': 'gemini-1.5-flash', // Maps to standard production Flash model on Google Cloud
     'gemini-1.5-flash': 'gemini-1.5-flash',
-    'gemini-1.5-pro': 'gemini-1.5-pro'
+    'gemini-1.5-pro': 'gemini-1.5-pro',
+    'gemini-2.0-flash': 'gemini-2.0-flash-exp'
   };
 
-  const targetModel = modelMap[model] || 'gemini-2.5-flash';
+  const targetModel = modelMap[model] || 'gemini-1.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${effectiveKey}`;
 
   const res = await fetch(url, {
@@ -266,6 +274,7 @@ export async function generateMultiModelAnswer({
   let answer = '';
   let providerUsed = modelMeta.provider;
   let isLive = false;
+  let liveError = null;
 
   // Try live provider if configured
   if (modelMeta.provider === 'gemini') {
@@ -274,9 +283,13 @@ export async function generateMultiModelAnswer({
       try {
         answer = await generateGeminiContent({ prompt, model: modelMeta.id, apiKey: key });
         isLive = true;
+        providerUsed = `Google Gemini (${modelMeta.name} Cloud API)`;
       } catch (err) {
+        liveError = err.message;
         console.warn(`[GeminiProvider] Live call note: ${err.message}. Falling back to local grounded engine.`);
       }
+    } else {
+      liveError = 'No Gemini API Key supplied. Using local Atlas vector grounding engine.';
     }
   } else if (modelMeta.provider === 'claude') {
     const key = apiKey || runtimeKeys.claude;
@@ -284,16 +297,20 @@ export async function generateMultiModelAnswer({
       try {
         answer = await generateClaudeContent({ prompt, model: modelMeta.id, apiKey: key });
         isLive = true;
+        providerUsed = `Anthropic Claude (${modelMeta.name} Cloud API)`;
       } catch (err) {
+        liveError = err.message;
         console.warn(`[ClaudeProvider] Live call note: ${err.message}. Falling back to local grounded engine.`);
       }
+    } else {
+      liveError = 'No Claude API Key supplied. Using local Atlas vector grounding engine.';
     }
   }
 
   // Fallback to local grounded engine if not live
   if (!answer) {
     answer = generateLocalDeterministicAnswer({ query, memories, rejectedMemories });
-    providerUsed = 'local-grounded';
+    providerUsed = 'Local Atlas Vector Grounding Engine';
   }
 
   // Baseline "without memory" comparison
@@ -313,6 +330,7 @@ export async function generateMultiModelAnswer({
       modelRequested: model,
       providerUsed,
       isLiveModel: isLive,
+      liveError,
       memory_records_injected: memories.map(m => m._id?.toString() || m.id),
       chat_history_injected: false,
       retrieval_strategy: 'mongodb_atlas_vector_search_1024d'

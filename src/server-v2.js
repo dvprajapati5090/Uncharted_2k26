@@ -54,6 +54,7 @@ import {
 import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark } from './benchmark-engine.js';
 import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
+import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
 
 validateConfig();
 
@@ -695,6 +696,27 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ----------------------------------------------------
+    // 6.14. ENTERPRISE ADR & MEMORY DOSSIER EXPORT API
+    // ----------------------------------------------------
+    if (req.method === 'GET' && pathname === '/api/export/adr-dossier') {
+      const workspaceId = parsedUrl.searchParams.get('workspaceId') || 'ws_core';
+      const format = parsedUrl.searchParams.get('format') || 'json';
+      const dossier = await generateEnterpriseAdrDossier(workspaceId);
+
+      if (format === 'markdown') {
+        res.writeHead(200, {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${dossier.filename}"`,
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(dossier.markdown);
+        return;
+      }
+
+      return sendJson(res, 200, { success: true, dossier });
+    }
+
+    // ----------------------------------------------------
     // 7. SEED & WIPE
     // ----------------------------------------------------
     if (req.method === 'POST' && pathname === '/api/wipe') {
@@ -764,6 +786,33 @@ function formatMemoryForUI(mem) {
 // Start Server
 async function start() {
   await initMongo();
+  try {
+    const existing = await findMemories({ workspaceId: 'ws_core' });
+    if (existing.length < 2) {
+      console.log('[Startup] Auto-seeding foundational team architectural directives into MongoDB...');
+      await extractAndFormMemory({
+        text: 'For Project Atlas, we use Node.js, Express and MongoDB Atlas.',
+        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+        workspaceId: 'ws_core',
+        channel: 'architecture'
+      });
+      await extractAndFormMemory({
+        text: 'Do not introduce Redis or paid infrastructure without approval.',
+        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+        workspaceId: 'ws_core',
+        channel: 'architecture'
+      });
+      await extractAndFormMemory({
+        text: 'No production deployments until November 5, 2026.',
+        user: { id: 'u_marcus', name: 'Marcus Chen' },
+        workspaceId: 'ws_core',
+        channel: 'sprint-planning'
+      });
+    }
+  } catch (err) {
+    console.warn('[Startup] Memory auto-seed check note:', err.message);
+  }
+
   server.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🧠 SynapseMem 2.0 (MongoDB Atlas Engine) on http://localhost:${PORT}`);

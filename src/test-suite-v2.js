@@ -35,6 +35,7 @@ import {
 import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark, BENCHMARK_SCENARIOS } from './benchmark-engine.js';
 import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
+import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -419,5 +420,20 @@ assert.strictEqual(resolveRes.success, true);
 assert.strictEqual(resolveRes.resolution, 'superseded');
 console.log('✔ Passed: Pre-commit conflict scanning, polarity clash detection, and resolution strategies verified.\n');
 
-console.log('🎉 ALL 15 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 16: Enterprise ADR & Memory Dossier Exporter
+// ----------------------------------------------------
+console.log('▶ TEST 16: Enterprise ADR & Memory Dossier Exporter');
+
+const dossierResult = await generateEnterpriseAdrDossier('ws_core');
+assert(dossierResult.markdown && dossierResult.markdown.includes('# 🏛️ SynapseMem 2.0 — Enterprise Architecture Decision Record (ADR)'), 'Markdown dossier must contain executive header');
+assert(dossierResult.markdown.includes('memory_vector_index'), 'Must cite Atlas Vector Search index');
+assert(dossierResult.markdown.includes('```mermaid'), 'Must generate Mermaid architecture topology graph');
+assert(dossierResult.structuredJson && dossierResult.structuredJson.summary, 'Must contain structured summary JSON');
+assert(dossierResult.filename.startsWith('SynapseMem_ADR_Dossier_'), 'Must generate standardized filename');
+console.log(`Generated Dossier: ${dossierResult.filename} (${dossierResult.markdown.length} bytes markdown)`);
+console.log(`Active Policies: ${dossierResult.structuredJson.summary.activeCount}, Graph Nodes: ${dossierResult.structuredJson.summary.graphNodesCount}, Adherence: ${dossierResult.structuredJson.summary.adherenceRate}%`);
+console.log('✔ Passed: Enterprise ADR documentation and structured JSON dossier generation verified.\n');
+
+console.log('🎉 ALL 16 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);
