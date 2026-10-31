@@ -56,6 +56,12 @@ import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark } from './benchmark-engine.js';
 import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
 import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
+import {
+  parseGitHubUrl,
+  installGuardianPullRequest,
+  syncDecisionToGitHubAdr,
+  reverseIngestCodebaseMemories
+} from './services/github-service.js';
 
 validateConfig();
 
@@ -213,7 +219,52 @@ const server = http.createServer(async (req, res) => {
       }
 
       let assistantMessage = null;
-      if (isQuery) {
+
+      // Check for GitHub Self-Onboarding Intent (e.g. "Connect to my GitHub repository: https://github.com/acme/backend")
+      const githubMatch = text.match(/\bconnect\s+(?:to\s+)?(?:my\s+)?(?:github\s+repo(?:sitory)?\s*:?\s*)?(https?:\/\/github\.com\/[^\s]+|[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+)/i) ||
+                          text.match(/\binstall\s+synapsemem\s+into\s+(https?:\/\/github\.com\/[^\s]+|[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+)/i);
+
+      if (githubMatch) {
+        try {
+          const parsed = parseGitHubUrl(githubMatch[1]);
+          const result = await installGuardianPullRequest({
+            owner: parsed.owner,
+            repo: parsed.repo,
+            githubToken: body.githubToken || process.env.GITHUB_TOKEN || 'demo',
+            workspaceId
+          });
+
+          assistantMessage = {
+            id: `msg_asst_${Date.now()}`,
+            channel,
+            sender: 'SynapseMem 2.0 (GitHub Self-Onboarding Agent)',
+            text: `🔗 **Autonomous GitHub Self-Onboarding Complete: \`${parsed.fullName}\`**\n\n` +
+                  `• **Reverse Memory Ingestion:** Crawled codebase and generated **${result.ingestedMemories.length} authoritative memories** in MongoDB Atlas (from \`package.json\`, \`docs/adr/\`, and \`.env.example\`).\n` +
+                  `• **Autonomous Pull Request Opened:** [**PR #${result.prNumber}: Install SynapseMem Architectural Memory Guardian**](${result.prUrl})\n` +
+                  `• **Installed CI Pipeline:** \`.github/workflows/synapse-pr-linter.yml\` & \`scripts/pr-linter.js\`\n\n` +
+                  `✨ *From the moment your team merges PR #${result.prNumber}, every future PR will be automatically audited by SynapseMem's 4-stage compliance linter!*`,
+            is_assistant: true,
+            timestamp: new Date(getAppNow().getTime() + 200).toISOString(),
+            github_onboarding_data: result
+          };
+
+          realtimeSync.broadcast({
+            operationType: 'insert',
+            collection: 'github_onboarding',
+            topic: 'GitHub Self-Onboarding',
+            summary: `Autonomously installed SynapseMem Guardian in ${parsed.fullName} via PR #${result.prNumber}`
+          });
+        } catch (ghErr) {
+          assistantMessage = {
+            id: `msg_asst_${Date.now()}`,
+            channel,
+            sender: 'SynapseMem 2.0 (GitHub Self-Onboarding Agent)',
+            text: `⚠️ **GitHub Onboarding Notice:** ${ghErr.message}`,
+            is_assistant: true,
+            timestamp: new Date(getAppNow().getTime() + 200).toISOString()
+          };
+        }
+      } else if (isQuery) {
         const recallResult = await recallMemories({
           query: text,
           user,
@@ -739,6 +790,89 @@ const server = http.createServer(async (req, res) => {
       }
 
       return sendJson(res, 200, { success: true, dossier });
+    }
+
+    // ----------------------------------------------------
+    // 6.15. GITHUB AUTONOMOUS SELF-ONBOARDING & ADR SYNC API
+    // ----------------------------------------------------
+    if (req.method === 'POST' && pathname === '/api/github/connect') {
+      const body = await parseBody(req);
+      const repoUrl = (body.repoUrl || '').trim();
+      if (!repoUrl) {
+        return sendJson(res, 400, { error: 'Repository URL is required (e.g. "https://github.com/acme/backend")' });
+      }
+
+      try {
+        const parsed = parseGitHubUrl(repoUrl);
+        const workspaceId = body.workspaceId || 'ws_core';
+        const githubToken = (body.githubToken || process.env.GITHUB_TOKEN || 'demo').trim();
+
+        const result = await installGuardianPullRequest({
+          owner: parsed.owner,
+          repo: parsed.repo,
+          githubToken,
+          workspaceId
+        });
+
+        realtimeSync.broadcast({
+          operationType: 'insert',
+          collection: 'github_onboarding',
+          topic: 'GitHub Self-Onboarding',
+          summary: `Autonomously installed SynapseMem Guardian in ${parsed.fullName} via PR #${result.prNumber}`
+        });
+
+        return sendJson(res, 201, result);
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    }
+
+    if (req.method === 'POST' && pathname === '/api/github/sync-adr') {
+      const body = await parseBody(req);
+      const memoryId = body.memoryId;
+      if (!memoryId) return sendJson(res, 400, { error: 'memoryId is required' });
+
+      const memory = await getMemoryById(memoryId);
+      if (!memory) return sendJson(res, 404, { error: 'Memory record not found in MongoDB Atlas' });
+
+      try {
+        const repoUrl = (body.repoUrl || process.env.GITHUB_REPO || 'https://github.com/acme/backend').trim();
+        const parsed = parseGitHubUrl(repoUrl);
+        const githubToken = (body.githubToken || process.env.GITHUB_TOKEN || 'demo').trim();
+
+        const result = await syncDecisionToGitHubAdr({
+          memory,
+          owner: parsed.owner,
+          repo: parsed.repo,
+          githubToken,
+          adrIndex: body.adrIndex || 4
+        });
+
+        realtimeSync.broadcast({
+          operationType: 'insert',
+          collection: 'github_adr_sync',
+          topic: 'ADR Synchronized',
+          summary: `Opened PR #${result.prNumber} recording ADR for "${memory.topic}" in ${parsed.fullName}`
+        });
+
+        return sendJson(res, 201, result);
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    }
+
+    if (req.method === 'GET' && pathname === '/api/github/status') {
+      return sendJson(res, 200, {
+        status: 'ready',
+        hasToken: !!process.env.GITHUB_TOKEN,
+        guardianWorkflow: '.github/workflows/synapse-pr-linter.yml',
+        linterScript: 'scripts/pr-linter.js',
+        capabilities: [
+          'zero_click_self_onboarding_pr',
+          'reverse_memory_ingestion_codebase',
+          'living_bidirectional_sync_adr_pr'
+        ]
+      });
     }
 
     // ----------------------------------------------------
