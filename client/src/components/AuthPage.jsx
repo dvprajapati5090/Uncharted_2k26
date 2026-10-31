@@ -268,6 +268,8 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                       </div>
                       <input
                         type="text"
+                        name="name"
+                        autoComplete="name"
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
@@ -329,6 +331,8 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                   </div>
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -360,6 +364,8 @@ export default function AuthPage({ onLoginSuccess, onBackToLanding }) {
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete={isRegister ? 'new-password' : 'current-password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
