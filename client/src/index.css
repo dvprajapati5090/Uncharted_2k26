@@ -158,3 +158,90 @@
 .memory-pulse-card {
   animation: memoryPulse 1.8s ease-out 1;
 }
+
+/* Custom Obsidian Sliders */
+.obsidian-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+  transition: background 0.2s ease;
+  cursor: pointer;
+}
+
+.obsidian-slider:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.obsidian-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #000000;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.obsidian-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.85);
+}
+
+.obsidian-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(0.95);
+}
+
+.obsidian-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #000000;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  cursor: grab;
+}
+
+
+/* --- Sidebar label CSS transition system ---
+   Labels stay in the DOM at all times. .is-expanded/.is-collapsed on the
+   container drives visibility via opacity + max-width so the slide animation
+   and label fade are perfectly in sync without React mount/unmount flash.
+*/
+.sidebar-label {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  display: inline-block;
+  vertical-align: middle;
+  transition: opacity 0.20s ease, max-width 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-sidebar-container.is-expanded .sidebar-label {
+  opacity: 1;
+  max-width: 220px;
+  pointer-events: auto;
+}
+
+.sidebar-section-label {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-sidebar-container.is-expanded .sidebar-section-label {
+  opacity: 1;
+  max-height: 40px;
+  pointer-events: auto;
+}
