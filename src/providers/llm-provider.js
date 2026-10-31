@@ -124,6 +124,32 @@ export function buildGroundingPrompt({
 }
 
 /**
+ * Dynamically queries available models from Google for this specific API key
+ */
+export async function getAvailableGeminiModels(apiKey) {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        msg = parsed.error?.message || errText;
+      } catch (_) {}
+      return { models: [], error: msg };
+    }
+    const data = await res.json();
+    const models = (data.models || [])
+      .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+      .map(m => m.name.replace(/^models\//, ''));
+    return { models, error: null };
+  } catch (err) {
+    return { models: [], error: err.message };
+  }
+}
+
+/**
  * Generates an answer using Google Gemini REST API with multi-model fallback resiliency
  */
 export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash', apiKey = '' }) {
@@ -132,17 +158,23 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
     throw new Error('No Google Gemini API key configured. Please enter your GEMINI_API_KEY in LLM Settings.');
   }
 
-  const modelMap = {
-    'gemini-2.5-flash': ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'],
-    'gemini-1.5-flash': ['gemini-1.5-flash', 'gemini-1.5-flash-latest'],
-    'gemini-1.5-pro': ['gemini-1.5-pro', 'gemini-1.5-pro-latest'],
-    'gemini-2.0-flash': ['gemini-2.0-flash', 'gemini-1.5-flash']
-  };
+  // Canonical candidates with pinned version fallbacks (avoiding deprecated -latest suffixes)
+  const candidateModels = [
+    model === 'gemini-2.5-flash' ? 'gemini-1.5-flash' : model,
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash-001',
+    'gemini-1.5-flash-002',
+    'gemini-1.5-pro',
+    'gemini-pro'
+  ].filter((v, i, a) => a.indexOf(v) === i && !v.includes('latest'));
 
-  const candidateModels = modelMap[model] || ['gemini-1.5-flash'];
+  let dynamicChecked = false;
   let lastError = null;
 
-  for (const targetModel of candidateModels) {
+  for (let i = 0; i < candidateModels.length; i++) {
+    const targetModel = candidateModels[i];
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${encodeURIComponent(effectiveKey)}`;
 
@@ -169,9 +201,21 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
           parsedMessage = errObj.error?.message || errText;
         } catch (_) {}
 
-        if (res.status === 404 && candidateModels.indexOf(targetModel) < candidateModels.length - 1) {
-          console.warn(`[GeminiProvider] Model ${targetModel} returned 404, attempting next fallback candidate...`);
-          continue;
+        if (res.status === 404) {
+          if (!dynamicChecked) {
+            dynamicChecked = true;
+            const listRes = await getAvailableGeminiModels(effectiveKey);
+            if (listRes.models && listRes.models.length > 0) {
+              for (const m of listRes.models) {
+                if (!candidateModels.includes(m)) candidateModels.push(m);
+              }
+            } else if (listRes.error) {
+              parsedMessage = listRes.error;
+            }
+          }
+          if (i < candidateModels.length - 1) {
+            continue;
+          }
         }
         throw new Error(`Google Gemini Cloud API (${res.status}): ${parsedMessage}`);
       }
@@ -184,7 +228,7 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
       return text.trim();
     } catch (err) {
       lastError = err;
-      if (err.message.includes('404') && candidateModels.indexOf(targetModel) < candidateModels.length - 1) {
+      if (err.message.includes('404') && i < candidateModels.length - 1) {
         continue;
       }
       throw err;
