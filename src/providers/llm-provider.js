@@ -85,6 +85,7 @@ export function getRuntimeKey(provider) {
 export function buildGroundingPrompt({
   query,
   memories = [],
+  rejectedMemories = [],
   graphContext = '',
   hierarchicalDomain = null
 }) {
@@ -96,6 +97,13 @@ export function buildGroundingPrompt({
     const until = m.validUntil ? `, Valid until: ${new Date(m.validUntil).toLocaleDateString()}` : '';
     return `• [MEMORY RECORD #${m._id || m.id}] (Status: ${status}, Topic: ${m.topic}, Owner: ${m.ownerId || m.owner}): "${statement}" (Reason: ${reason}${until})`;
   });
+
+  // Inject relevant expired constraints so LLM can explain that the temporal boundary elapsed
+  const expiredMatches = (rejectedMemories || []).filter(r => r.isExpired);
+  for (const exp of expiredMatches) {
+    const dateStr = exp.validUntil ? new Date(exp.validUntil).toLocaleDateString() : 'scheduled date';
+    memoryLines.push(`• [EXPIRED CONSTRAINT #${exp.id}] (Status: EXPIRED on ${dateStr}, Topic: ${exp.topic}): "${exp.statement}"`);
+  }
 
   return [
     `You are SynapseMem 2.0, the authoritative memory operating system for AI agents.`,
@@ -342,17 +350,23 @@ export async function testLlmConnection({ provider = 'gemini', apiKey = '' }) {
  */
 export function generateLocalDeterministicAnswer({ query, memories = [], rejectedMemories = [] }) {
   const qLower = query.toLowerCase();
+  const qWords = qLower.split(/[^a-z0-9]+/).filter(w => w.length > 2);
 
-  const expiredDeployment = rejectedMemories.find(r => 
-    r.isExpired && (r.topic === 'Deployment' || /freeze|deployment/i.test(r.statement || ''))
+  const relevantExpired = rejectedMemories.find(r => 
+    r.isExpired && (
+      (r.topic && qLower.includes(r.topic.toLowerCase())) ||
+      (r.statement && qWords.some(w => w.length > 3 && r.statement.toLowerCase().includes(w))) ||
+      /freeze|deployment|error/i.test(r.statement || '')
+    )
   );
 
   if (memories.length === 0) {
-    if ((qLower.includes('deploy') || qLower.includes('freeze')) && expiredDeployment) {
-      const expDate = expiredDeployment.validUntil 
-        ? new Date(expiredDeployment.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    if (relevantExpired) {
+      const expDate = relevantExpired.validUntil 
+        ? new Date(relevantExpired.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : 'the scheduled date';
-      return `The prior restriction ("${expiredDeployment.statement}") was in effect, but it expired on ${expDate}. There are currently no active deployment freeze rules.`;
+      const topicLabel = relevantExpired.topic ? relevantExpired.topic.toLowerCase() : 'freeze';
+      return `The prior restriction ("${relevantExpired.statement}") was in effect, but it expired on ${expDate}. There are currently no active ${topicLabel} freeze rules.`;
     }
     return `I checked the persistent memory ledger, but no active decision or constraint matches "${query}".`;
   }
@@ -426,7 +440,7 @@ export async function generateMultiModelAnswer({
   model = 'gemini-2.5-flash',
   apiKey = ''
 }) {
-  const prompt = buildGroundingPrompt({ query, memories, graphContext, hierarchicalDomain });
+  const prompt = buildGroundingPrompt({ query, memories, rejectedMemories, graphContext, hierarchicalDomain });
   const modelMeta = AVAILABLE_MODELS.find(m => m.id === model) || AVAILABLE_MODELS[0];
 
   let answer = '';
