@@ -4,6 +4,7 @@ import '../landing.css';
 export default function LandingPage({
   onEnterApp,
   onEnterDemo,
+  onOpenAuth,
   allTeams = [],
   teamMembers = [],
   activeTeam,
@@ -259,7 +260,7 @@ export default function LandingPage({
           <div className="flex items-center gap-3 justify-self-end">
             <button
               type="button"
-              onClick={() => setLoginModalOpen(true)}
+              onClick={onOpenAuth || (() => setLoginModalOpen(true))}
               className="btn btn-solid header-cta appear appear--scale"
               style={{ '--d': '0.34s' }}
             >
@@ -322,7 +323,7 @@ export default function LandingPage({
             <div className="hero-actions">
               <button
                 type="button"
-                onClick={() => setLoginModalOpen(true)}
+                onClick={onOpenAuth || (() => setLoginModalOpen(true))}
                 className="btn btn-solid hero-btn appear appear--btn"
                 style={{ '--d': '0.96s' }}
               >
@@ -338,51 +339,25 @@ export default function LandingPage({
               </button>
             </div>
 
-            {/* 1-Click Fast Identity Pill Bar for Candidates & Leads */}
+            {/* Standard Auth Prompt */}
             <div
-              className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-center gap-2 text-xs text-neutral-300 appear appear--soft"
+              className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-center gap-3 text-xs text-neutral-300 appear appear--soft"
               style={{ '--d': '1.18s' }}
             >
-              <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold mr-1">
-                Instant Sign In:
-              </span>
-
               <button
                 type="button"
-                onClick={() => handleQuickLogin('u_cand_a', 'ws_sprint')}
-                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                title="Login as Candidate A (Sprint Dev)"
+                onClick={onOpenAuth}
+                className="text-neutral-400 hover:text-white underline underline-offset-4 transition cursor-pointer"
               >
-                <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[9px] flex items-center justify-center">CA</span>
-                <span>Candidate A</span>
+                Sign in with existing work email &amp; password →
               </button>
-
+              <span className="text-neutral-600">&bull;</span>
               <button
                 type="button"
-                onClick={() => handleQuickLogin('u_cand_b', 'ws_sprint')}
-                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                title="Login as Candidate B (Token Guard Test)"
+                onClick={onOpenAuth}
+                className="text-neutral-400 hover:text-white underline underline-offset-4 transition cursor-pointer"
               >
-                <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[9px] flex items-center justify-center">CB</span>
-                <span>Candidate B</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('u_sarah', 'ws_core')}
-                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                title="Login as Sarah Jenkins (Tech Lead)"
-              >
-                <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-[9px] flex items-center justify-center">SJ</span>
-                <span>Tech Lead</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setLoginModalOpen(true)}
-                className="text-[11px] text-neutral-400 hover:text-white underline underline-offset-4 ml-1 transition"
-              >
-                More teams & users...
+                Create a new team account
               </button>
             </div>
           </div>

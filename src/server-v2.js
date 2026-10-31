@@ -56,6 +56,14 @@ import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark } from './benchmark-engine.js';
 import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
 import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
+import {
+  registerUser,
+  loginUser,
+  getUserByToken,
+  logoutUser,
+  getAllAuthWorkspaces,
+  getUsersByWorkspace
+} from './auth.js';
 
 validateConfig();
 
@@ -156,15 +164,58 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ----------------------------------------------------
+    // ----------------------------------------------------
+    // AUTHENTICATION (EMAIL & PASSWORD REGISTER / LOGIN)
+    // ----------------------------------------------------
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      try {
+        const body = await parseBody(req);
+        const result = registerUser(body);
+        return sendJson(res, 201, { success: true, ...result });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      try {
+        const body = await parseBody(req);
+        const result = loginUser(body);
+        return sendJson(res, 200, { success: true, ...result });
+      } catch (err) {
+        return sendJson(res, 401, { error: err.message });
+      }
+    }
+
+    if (req.method === 'GET' && pathname === '/api/auth/me') {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '') || req.headers['x-auth-token'];
+      const data = getUserByToken(token);
+      if (!data) {
+        return sendJson(res, 401, { error: 'Not authenticated' });
+      }
+      return sendJson(res, 200, { success: true, ...data });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/logout') {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '') || req.headers['x-auth-token'];
+      logoutUser(token);
+      return sendJson(res, 200, { success: true });
+    }
+
     // 1. WORKSPACES (TEAMS) & USERS
     // ----------------------------------------------------
     if (req.method === 'GET' && pathname === '/api/teams') {
-      const workspaces = getAllWorkspaces();
+      const authWs = getAllAuthWorkspaces();
+      const workspaces = authWs.length > 0 ? authWs : getAllWorkspaces();
       return sendJson(res, 200, workspaces);
     }
 
     if (req.method === 'GET' && pathname.startsWith('/api/teams/') && pathname.endsWith('/users')) {
-      const users = getAllUsers();
+      const teamId = pathname.split('/')[3];
+      const authUsers = getUsersByWorkspace(teamId);
+      const users = authUsers.length > 0 ? authUsers : getAllUsers();
       return sendJson(res, 200, users);
     }
 

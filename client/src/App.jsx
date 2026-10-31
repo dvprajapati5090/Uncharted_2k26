@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import LandingPage from './components/LandingPage';
+import AuthPage from './components/AuthPage';
 import {
   BrainCircuit,
   Building2,
@@ -1097,9 +1098,18 @@ export default function App() {
     setAddModalOpen(true); }; const handleLogin = (team, user) => { if (team) { setActiveTeam(team); try { localStorage.setItem('synapse_active_team_id', team.id); } catch (_) {} } if (user) { setActiveUser(user); try { localStorage.setItem('synapse_active_user_id', user.id); } catch (_) {} } setViewMode('app'); showToast(`Signed in as ${user?.name || 'Developer'} (${user?.role || 'Member'}) • ${team?.name || 'Workspace'}`, 'success');
   };
 
+  if (viewMode === 'auth') {
+    return (
+      <AuthPage
+        onLoginSuccess={(team, user) => handleLogin(team, user)}
+        onBackToLanding={() => setViewMode('landing')}
+      />
+    );
+  }
+
   if (viewMode === 'landing') {
     return (
-      <LandingPage allTeams={allTeams} teamMembers={teamMembers} activeTeam={activeTeam} activeUser={activeUser} onLogin={handleLogin}
+      <LandingPage allTeams={allTeams} teamMembers={teamMembers} activeTeam={activeTeam} activeUser={activeUser} onLogin={handleLogin} onOpenAuth={() => setViewMode('auth')}
         onEnterApp={() => setViewMode('app')}
         onEnterDemo={() => {
           setViewMode('app');
@@ -1330,7 +1340,7 @@ export default function App() {
           </button>
 
           {/* Active User Avatar */}
-          <button onClick={() => setViewMode('landing')} className="flex items-center gap-2 pl-2 border-l border-white/10 hover:opacity-80 transition cursor-pointer text-left focus:outline-none" title="Switch User / Sign Out to Landing Page">
+          <button onClick={() => { setViewMode('auth'); showToast('Signed out of workspace', 'info'); }} className="flex items-center gap-2 pl-2 border-l border-white/10 hover:opacity-80 transition cursor-pointer text-left focus:outline-none" title="Log Out / Switch Account">
             <div className="w-7 h-7 rounded-full bg-white text-black font-bold flex items-center justify-center text-xs shadow">
               {activeUser?.avatar || 'U'}
             </div>
