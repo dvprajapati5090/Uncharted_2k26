@@ -400,6 +400,40 @@ export async function reverseIngestCodebaseMemories({
     }
   }
 
+  // 5. Connect dependencies & architectural lineage in the Knowledge Graph and compute Domain Hierarchy
+  try {
+    const { addMemoryRelation, buildHierarchicalClusters } = await import('../db-mongo.js');
+    const manifestMem = ingested.find(m => m.source === 'package.json' || m.source === 'pyproject.toml');
+    const envMem = ingested.find(m => m.source === '.env.example');
+    const adrMems = ingested.filter(m => (m.source && m.source.includes('adr')));
+    const readmeMem = ingested.find(m => m.source === 'README.md');
+
+    if (manifestMem && envMem) {
+      await addMemoryRelation(manifestMem.memoryId, envMem.memoryId, 'integrates_with', 'Approved Cloud Stack');
+    }
+
+    if (manifestMem) {
+      for (const adr of adrMems) {
+        await addMemoryRelation(manifestMem.memoryId, adr.memoryId, 'governed_by', `ADR: ${adr.topic}`);
+      }
+    }
+
+    if (readmeMem && manifestMem) {
+      await addMemoryRelation(readmeMem.memoryId, manifestMem.memoryId, 'implements_architecture', 'Runtime Implementation');
+    }
+
+    // Link ADRs between each other
+    for (let i = 0; i < adrMems.length; i++) {
+      for (let j = i + 1; j < adrMems.length; j++) {
+        await addMemoryRelation(adrMems[i].memoryId, adrMems[j].memoryId, 'complements', 'Consensus Boundary');
+      }
+    }
+
+    await buildHierarchicalClusters(workspaceId);
+  } catch (err) {
+    console.warn('[GitHub Ingestion] Relation & hierarchy build note:', err.message);
+  }
+
   return ingested;
 }
 
