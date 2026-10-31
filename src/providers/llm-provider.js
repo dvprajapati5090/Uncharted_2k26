@@ -142,6 +142,14 @@ export async function getAvailableGeminiModels(apiKey) {
     const data = await res.json();
     const models = (data.models || [])
       .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+      .filter(m => {
+        const name = (m.name || '').toLowerCase();
+        // Strictly filter to text-capable models: exclude TTS, audio-only, embedding, and image gen models
+        if (name.includes('tts') || name.includes('audio') || name.includes('embed') || name.includes('imagen')) {
+          return false;
+        }
+        return true;
+      })
       .map(m => m.name.replace(/^models\//, ''));
     return { models, error: null };
   } catch (err) {
@@ -152,23 +160,24 @@ export async function getAvailableGeminiModels(apiKey) {
 /**
  * Generates an answer using Google Gemini REST API with multi-model fallback resiliency
  */
-export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash', apiKey = '' }) {
+export async function generateGeminiContent({ prompt, model = 'gemini-1.5-flash', apiKey = '' }) {
   const effectiveKey = (apiKey || runtimeKeys.gemini || '').trim();
   if (!effectiveKey) {
     throw new Error('No Google Gemini API key configured. Please enter your GEMINI_API_KEY in LLM Settings.');
   }
 
-  // Canonical candidates with pinned version fallbacks (avoiding deprecated -latest suffixes)
+  const cleanRequested = (model || '').replace(/^models\//, '');
+  // Canonical text candidates: prioritize production flash/pro models, excluding TTS audio models
   const candidateModels = [
-    model === 'gemini-2.5-flash' ? 'gemini-1.5-flash' : model,
+    cleanRequested && !cleanRequested.includes('2.5') && !cleanRequested.includes('tts') ? cleanRequested : null,
     'gemini-1.5-flash',
+    'gemini-1.5-pro',
     'gemini-2.0-flash',
     'gemini-2.0-flash-exp',
     'gemini-1.5-flash-001',
     'gemini-1.5-flash-002',
-    'gemini-1.5-pro',
     'gemini-pro'
-  ].filter((v, i, a) => a.indexOf(v) === i && !v.includes('latest'));
+  ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i && !v.includes('latest') && !v.includes('tts') && !v.includes('audio'));
 
   let dynamicChecked = false;
   let lastError = null;
@@ -201,7 +210,8 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
           parsedMessage = errObj.error?.message || errText;
         } catch (_) {}
 
-        if (res.status === 404) {
+        // If model not found or modality unsupported (e.g. 404 or 400 modal mismatch), fallback to next candidate
+        if (res.status === 404 || (res.status === 400 && parsedMessage.includes('modalities'))) {
           if (!dynamicChecked) {
             dynamicChecked = true;
             const listRes = await getAvailableGeminiModels(effectiveKey);
@@ -214,6 +224,7 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
             }
           }
           if (i < candidateModels.length - 1) {
+            console.warn(`[GeminiProvider] Model ${targetModel} note (${res.status}): ${parsedMessage}. Trying next text model...`);
             continue;
           }
         }
@@ -228,7 +239,7 @@ export async function generateGeminiContent({ prompt, model = 'gemini-2.5-flash'
       return text.trim();
     } catch (err) {
       lastError = err;
-      if (err.message.includes('404') && i < candidateModels.length - 1) {
+      if ((err.message.includes('404') || err.message.includes('modalities')) && i < candidateModels.length - 1) {
         continue;
       }
       throw err;
