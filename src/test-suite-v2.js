@@ -36,6 +36,12 @@ import { realtimeSync } from './realtime-sync.js';
 import { runLiveBenchmark, getLatestBenchmark, BENCHMARK_SCENARIOS } from './benchmark-engine.js';
 import { analyzePreCommitConflict, executeConflictResolution } from './conflict-arbiter.js';
 import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
+import {
+  parseGitHubUrl,
+  installGuardianPullRequest,
+  syncDecisionToGitHubAdr,
+  reverseIngestCodebaseMemories
+} from './services/github-service.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
@@ -438,5 +444,51 @@ console.log(`Generated Dossier: ${dossierResult.filename} (${dossierResult.markd
 console.log(`Active Policies: ${dossierResult.structuredJson.summary.activeCount}, Graph Nodes: ${dossierResult.structuredJson.summary.graphNodesCount}, Adherence: ${dossierResult.structuredJson.summary.adherenceRate}%`);
 console.log('✔ Passed: Enterprise ADR documentation and structured JSON dossier generation verified.\n');
 
-console.log('🎉 ALL 16 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
+// ----------------------------------------------------
+// TEST 17: Autonomous GitHub Self-Onboarding & Bidirectional ADR Sync Engine
+// ----------------------------------------------------
+console.log('▶ TEST 17: Autonomous GitHub Self-Onboarding & Bidirectional ADR Sync Engine');
+
+// 1. Verify repository URL parsing
+const parsedRepo = parseGitHubUrl('https://github.com/acme/backend-api');
+assert.strictEqual(parsedRepo.owner, 'acme');
+assert.strictEqual(parsedRepo.repo, 'backend-api');
+assert.strictEqual(parsedRepo.fullName, 'acme/backend-api');
+
+// 2. Autonomous self-installation & reverse memory ingestion
+const installRes = await installGuardianPullRequest({
+  owner: parsedRepo.owner,
+  repo: parsedRepo.repo,
+  githubToken: 'demo',
+  workspaceId: 'ws_core'
+});
+assert.strictEqual(installRes.success, true);
+assert(installRes.prUrl.includes('github.com/acme/backend-api/pull/'), 'Must generate valid PR URL');
+assert(installRes.installedFiles.includes('.github/workflows/synapse-pr-linter.yml'));
+assert(installRes.installedFiles.includes('scripts/pr-linter.js'));
+assert(installRes.ingestedMemories.length > 0, 'Must reverse-ingest codebase memories into MongoDB');
+console.log(`Self-Onboarding PR: ${installRes.prUrl} (#${installRes.prNumber})`);
+console.log(`Reverse-Ingested Codebase Memories: ${installRes.ingestedMemories.length} authoritative documents created`);
+
+// 3. Living bidirectional sync (Chat -> GitHub ADR PR)
+const adrSyncRes = await syncDecisionToGitHubAdr({
+  memory: {
+    _id: 'mem_redis_sync_01',
+    topic: 'Infrastructure',
+    decision: 'We have approved Redis for caching with 3600s TTL.',
+    reason: 'Reduced latency on hot user session reads'
+  },
+  owner: parsedRepo.owner,
+  repo: parsedRepo.repo,
+  githubToken: 'demo',
+  adrIndex: 4
+});
+assert.strictEqual(adrSyncRes.success, true);
+assert.strictEqual(adrSyncRes.adrFileName, 'docs/adr/ADR-004-infrastructure.md');
+assert(adrSyncRes.markdown.includes('ADR-004: We have approved Redis for caching with 3600s TTL.'));
+assert(adrSyncRes.markdown.includes('ACCEPTED') && adrSyncRes.markdown.includes('mem_redis_sync_01'));
+console.log(`Living ADR Sync: Opened PR #${adrSyncRes.prNumber} creating ${adrSyncRes.adrFileName}`);
+console.log('✔ Passed: Autonomous self-onboarding PR, reverse codebase memory ingestion, and living ADR sync verified.\n');
+
+console.log('🎉 ALL 17 SYNAPSEMEM 2.0 VERIFICATION TESTS PASSED SUCCESSFULLY!');
 process.exit(0);
