@@ -4,24 +4,17 @@ import { config } from '../config.js';
 
 export const AVAILABLE_MODELS = [
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash (Production)',
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash',
     provider: 'gemini',
-    description: 'Ultra-fast production model with native Atlas grounding.',
+    description: 'High-speed Google DeepMind reasoning model with native Atlas grounding.',
     badge: 'Google DeepMind'
   },
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash Lite',
     provider: 'gemini',
-    description: 'State-of-the-art Google DeepMind reasoning model with native grounding support.',
-    badge: 'Google DeepMind'
-  },
-  {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
-    provider: 'gemini',
-    description: 'High-intelligence Gemini model for complex multi-hop architectural reasoning.',
+    description: 'Ultra-low latency Google DeepMind model for rapid contextual grounding.',
     badge: 'Google DeepMind'
   },
   {
@@ -160,23 +153,20 @@ export async function getAvailableGeminiModels(apiKey) {
 /**
  * Generates an answer using Google Gemini REST API with multi-model fallback resiliency
  */
-export async function generateGeminiContent({ prompt, model = 'gemini-1.5-flash', apiKey = '' }) {
+export async function generateGeminiContent({ prompt, model = 'gemini-3-flash-preview', apiKey = '' }) {
   const effectiveKey = (apiKey || runtimeKeys.gemini || '').trim();
   if (!effectiveKey) {
     throw new Error('No Google Gemini API key configured. Please enter your GEMINI_API_KEY in LLM Settings.');
   }
 
   const cleanRequested = (model || '').replace(/^models\//, '');
-  // Canonical text candidates: prioritize production flash/pro models, excluding TTS audio models
+  // Canonical text candidates: prioritize active 2026 production models
   const candidateModels = [
-    cleanRequested && !cleanRequested.includes('2.5') && !cleanRequested.includes('tts') ? cleanRequested : null,
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-1.5-flash-001',
-    'gemini-1.5-flash-002',
-    'gemini-pro'
+    cleanRequested && !cleanRequested.includes('tts') && !cleanRequested.includes('1.5') && !cleanRequested.includes('2.0') && !cleanRequested.includes('2.5') ? cleanRequested : null,
+    'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite',
+    'gemini-3.1-flash-lite-preview',
+    'gemini-3.8-flash'
   ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i && !v.includes('latest') && !v.includes('tts') && !v.includes('audio'));
 
   let dynamicChecked = false;
@@ -210,8 +200,18 @@ export async function generateGeminiContent({ prompt, model = 'gemini-1.5-flash'
           parsedMessage = errObj.error?.message || errText;
         } catch (_) {}
 
+        // Auto-extract recommended models if Google explicitly names one in the error message
+        const recommendedMatch = parsedMessage.match(/(?:use\s+models\/|update\s+your\s+code\s+to\s+use\s+models\/)([a-zA-Z0-9.-]+)/i);
+        if (recommendedMatch && recommendedMatch[1]) {
+          const recModel = recommendedMatch[1];
+          if (!candidateModels.includes(recModel)) {
+            console.log(`[GeminiProvider] Dynamically queued Google's recommended model: ${recModel}`);
+            candidateModels.splice(i + 1, 0, recModel);
+          }
+        }
+
         // If model not found or modality unsupported (e.g. 404 or 400 modal mismatch), fallback to next candidate
-        if (res.status === 404 || (res.status === 400 && parsedMessage.includes('modalities'))) {
+        if (res.status === 404 || (res.status === 400 && parsedMessage.includes('modalities')) || res.status === 500) {
           if (!dynamicChecked) {
             dynamicChecked = true;
             const listRes = await getAvailableGeminiModels(effectiveKey);
@@ -239,7 +239,7 @@ export async function generateGeminiContent({ prompt, model = 'gemini-1.5-flash'
       return text.trim();
     } catch (err) {
       lastError = err;
-      if ((err.message.includes('404') || err.message.includes('modalities')) && i < candidateModels.length - 1) {
+      if ((err.message.includes('404') || err.message.includes('modalities') || err.message.includes('500')) && i < candidateModels.length - 1) {
         continue;
       }
       throw err;
@@ -311,13 +311,13 @@ export async function testLlmConnection({ provider = 'gemini', apiKey = '' }) {
   if (provider === 'gemini') {
     const text = await generateGeminiContent({
       prompt: 'Respond with exactly: "SynapseMem Live Connection Verified"',
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3-flash-preview',
       apiKey: cleanKey
     });
     return {
       success: true,
       provider: 'Google Gemini',
-      modelUsed: 'gemini-1.5-flash',
+      modelUsed: 'gemini-3-flash-preview',
       response: text
     };
   } else if (provider === 'claude') {
