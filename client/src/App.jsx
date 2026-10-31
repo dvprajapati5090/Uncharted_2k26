@@ -1237,13 +1237,71 @@ export default function App() {
           </div>
         </button>
 
-        {/* Centre: workspace + active view breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-neutral-400 pointer-events-none select-none">
-          <span className="font-medium text-neutral-200 truncate max-w-[160px]">{activeTeam?.name || 'Atlas Core'}</span>
-          <span className="text-white/20">/</span>
-          <span className="text-neutral-500">
-            {activeTab === 'chat' ? 'Chatbot' : activeTab === 'ledger' ? 'Memory Ledger' : activeTab === 'training' ? 'Training & DPO' : 'Consensus'}
-          </span>
+        {/* Centre: Direct One-Click Tab Navigation */}
+        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10 text-xs shadow-inner">
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition ${
+              activeTab === 'chat'
+                ? 'bg-white text-black font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Chatbot</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('ledger');
+              loadMemories();
+              loadGraphData();
+              loadHierarchyData();
+            }}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition ${
+              activeTab === 'ledger'
+                ? 'bg-white text-black font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Memory Ledger</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
+              activeTab === 'ledger' ? 'bg-black text-white font-bold' : 'bg-white/10 text-neutral-300'
+            }`}>
+              {memories.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('training');
+              loadTrainingData();
+            }}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition ${
+              activeTab === 'training'
+                ? 'bg-white text-black font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Training</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('consensus');
+              loadConsensusData();
+            }}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition ${
+              activeTab === 'consensus'
+                ? 'bg-white text-black font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Vote className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Consensus</span>
+          </button>
         </div>
 
         {/* Right: GitHub Guardian USP + status + LLM key */}
