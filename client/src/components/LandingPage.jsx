@@ -238,26 +238,26 @@ export default function LandingPage({
               className="lede appear appear--soft"
               style={{ '--d': '0.82s', animationDuration: '1.1s' }}
             >
-              SynapseMem captures architectural decisions and technical constraints directly in MongoDB with 1024D vector embeddings. With conflict resolution, temporal expiry, and multi-agent consensus, LLMs reference verified decisions instead of noisy chat logs.
+              Captures team decisions into MongoDB vector memory with lineage tracking, auto-expiry, and multi-agent consensus — so LLMs never hallucinate past constraints.
             </p>
 
             {/* Focused Action CTAs */}
             <div className="hero-actions">
               <button
                 type="button"
-                onClick={onOpenAuth}
+                onClick={onEnterDemo}
                 className="btn btn-solid hero-btn appear appear--btn"
                 style={{ '--d': '0.96s' }}
               >
-                Sign In to Workspace &rarr;
+                Guided Architecture Demo &rarr;
               </button>
               <button
                 type="button"
-                onClick={onEnterDemo}
+                onClick={onOpenAuth}
                 className="btn btn-ghost-hero hero-btn appear appear--side"
                 style={{ '--d': '1.08s' }}
               >
-                Guided Architecture Demo
+                Sign In to Workspace
               </button>
             </div>
           </div>
