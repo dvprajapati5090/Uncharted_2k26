@@ -6,6 +6,7 @@ import { realtimeSync } from './realtime-sync.js';
 let client = null;
 let db = null;
 let isConnected = false;
+let lastMongoError = null;
 
 // Fallback in-memory store if MONGODB_URI is not provided or connection is lost
 const memoryStore = {
@@ -42,6 +43,7 @@ export async function initMongo(customDbName = null) {
       connectTimeoutMS: 10000
     });
 
+    lastMongoError = null;
     await client.connect();
     db = client.db(targetDbName);
     isConnected = true;
@@ -51,6 +53,7 @@ export async function initMongo(customDbName = null) {
     await realtimeSync.init(db, config.mongodb.memoriesCollection);
     return db;
   } catch (err) {
+    lastMongoError = err.message;
     console.warn(`[MongoDB] Could not connect to Atlas (${err.message}). Using local document engine.`);
     initDefaultData();
     return null;
@@ -63,6 +66,10 @@ export function getDb() {
 
 export function isMongoConnected() {
   return isConnected;
+}
+
+export function getLastMongoError() {
+  return lastMongoError;
 }
 
 /**

@@ -7,6 +7,9 @@ import crypto from 'node:crypto';
 import { config, validateConfig } from './config.js';
 import {
   initMongo,
+  isMongoConnected,
+  getLastMongoError,
+  insertMemoryDocument,
   findMemories,
   getMemoryById,
   updateMemoryDocument,
@@ -94,6 +97,33 @@ export async function ensureMongo() {
   if (isMongoInitialized) return;
   await initMongo();
   isMongoInitialized = true;
+
+  try {
+    const existing = await findMemories({ workspaceId: 'ws_core' });
+    if (existing.length < 2) {
+      console.log('[Startup] Auto-seeding foundational team architectural directives into MongoDB...');
+      await extractAndFormMemory({
+        text: 'For Project Atlas, we use Node.js, Express and MongoDB Atlas.',
+        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+        workspaceId: 'ws_core',
+        channel: 'architecture'
+      });
+      await extractAndFormMemory({
+        text: 'Do not introduce Redis or paid infrastructure without approval.',
+        user: { id: 'u_sarah', name: 'Sarah Jenkins' },
+        workspaceId: 'ws_core',
+        channel: 'architecture'
+      });
+      await extractAndFormMemory({
+        text: 'No production deployments until November 5, 2026.',
+        user: { id: 'u_marcus', name: 'Marcus Chen' },
+        workspaceId: 'ws_core',
+        channel: 'sprint-planning'
+      });
+    }
+  } catch (err) {
+    console.warn('[Startup] Memory auto-seed check note:', err.message);
+  }
 }
 
 export function parseBody(req) {
@@ -184,13 +214,17 @@ export async function handleRequest(req, res) {
     // 0. HEALTH CHECK
     // ----------------------------------------------------
     if (req.method === 'GET' && pathname === '/api/health') {
+      const isAtlas = isMongoConnected();
       return sendJson(res, 200, {
         status: 'healthy',
         engine: 'SynapseMem 2.0 Agentic Memory',
         timestamp: getAppNow().toISOString(),
         mongodb: {
           database: config.mongodb.dbName,
-          vectorIndex: config.mongodb.vectorIndexName
+          connected: isAtlas,
+          engine: isAtlas ? 'MongoDB Atlas (Live)' : 'In-Memory Document Engine (Fallback)',
+          vectorIndex: config.mongodb.vectorIndexName,
+          error: getLastMongoError()
         },
         embeddings: {
           provider: config.embedding.provider,
@@ -542,7 +576,20 @@ export async function handleRequest(req, res) {
       const body = await parseBody(req);
       const { ObjectId } = await import('mongodb');
 
-      const fullText = `${body.topic}: ${body.decision}. Reason: ${body.reason || ''}`;
+      if (body.text && !body.decision) {
+        const mem = await extractAndFormMemory({
+          text: body.text,
+          user: { id: body.userId || body.owner || 'u_sarah', name: body.userName || 'Sarah Jenkins' },
+          workspaceId: body.workspaceId || body.teamId || 'ws_core',
+          channel: body.channel || 'general'
+        });
+        return sendJson(res, 201, mem ? formatMemoryForUI(mem.extracted) : { success: true });
+      }
+
+      const topic = body.topic || 'Architecture';
+      const decision = body.decision || body.text || 'Decision recorded';
+      const reason = body.reason || 'Manually added decision';
+      const fullText = `${topic}: ${decision}. Reason: ${reason}`;
       const embeddings = await embedDocuments([fullText]);
 
       const validUntilDate = body.valid_until ? new Date(body.valid_until) : null;
@@ -558,12 +605,12 @@ export async function handleRequest(req, res) {
         workspaceId: body.teamId || 'ws_core',
         createdBy: 'u_sarah',
         type: body.type || 'decision',
-        topic: body.topic,
+        topic: topic,
         content: {
-          statement: body.decision,
-          reason: body.reason || 'Manually added decision'
+          statement: decision,
+          reason: reason
         },
-        tags: [body.topic.toLowerCase()],
+        tags: [topic.toLowerCase()],
         source: { kind: 'manual', channel: 'ledger' },
         confidence: 1.0,
         sensitivity: 'workspace',
