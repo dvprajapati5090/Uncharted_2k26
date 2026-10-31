@@ -76,6 +76,10 @@ jobs:
 }
 
 function getLinterTemplate() {
+  const linterMjsPath = path.resolve(process.cwd(), 'scripts/pr-linter.mjs');
+  if (fs.existsSync(linterMjsPath)) {
+    return fs.readFileSync(linterMjsPath, 'utf8');
+  }
   const linterPath = path.resolve(process.cwd(), 'scripts/pr-linter.js');
   if (fs.existsSync(linterPath)) {
     return fs.readFileSync(linterPath, 'utf8');
@@ -419,6 +423,8 @@ export async function installGuardianPullRequest({
   let prNumber = 1;
   let commitSha = 'sha_' + Math.random().toString(16).substring(2, 10);
 
+  let targetBranch = `${branchName}-${Date.now().toString().slice(-4)}`;
+
   // If live GitHub token provided, execute real GitHub REST API calls via Octokit
   if (!isSimulated) {
     const octokit = new Octokit({ auth: githubToken });
@@ -436,7 +442,6 @@ export async function installGuardianPullRequest({
     const baseSha = refData.data.object.sha;
 
     // 3. Create new branch for SynapseMem
-    const targetBranch = `${branchName}-${Date.now().toString().slice(-4)}`;
     await octokit.rest.git.createRef({
       owner,
       repo,
@@ -454,12 +459,22 @@ export async function installGuardianPullRequest({
       branch: targetBranch
     });
 
-    // 5. Commit scripts/pr-linter.js
+    // 5. Commit scripts/pr-linter.mjs (Universal ESM)
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: 'scripts/pr-linter.mjs',
+      message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine (.mjs)',
+      content: Buffer.from(linterContent).toString('base64'),
+      branch: targetBranch
+    });
+
+    // 5b. Commit scripts/pr-linter.js (Dual compatibility wrapper)
     await octokit.rest.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: 'scripts/pr-linter.js',
-      message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine',
+      message: 'feat(ci): add SynapseMem 4-stage architectural compliance verification engine (.js)',
       content: Buffer.from(linterContent).toString('base64'),
       branch: targetBranch
     });
@@ -511,12 +526,22 @@ From the second this PR is merged into \`${defaultBranch}\`, every future PR ope
     prUrl,
     prNumber,
     commitSha,
-    branchName,
+    branchName: targetBranch,
+    branch: targetBranch,
     installedFiles: [
       '.github/workflows/synapse-pr-linter.yml',
+      'scripts/pr-linter.mjs',
       'scripts/pr-linter.js'
     ],
-    ingestedMemories,
+    ingestedCount: ingestedMemories.length,
+    ingestedMemories: ingestedMemories.map(m => ({
+      ...m,
+      directive: m.statement
+    })),
+    pullRequest: {
+      number: prNumber,
+      html_url: prUrl
+    },
     message: `Autonomously connected to ${owner}/${repo} and opened Pull Request #${prNumber} to install SynapseMem Guardian.`
   };
 }

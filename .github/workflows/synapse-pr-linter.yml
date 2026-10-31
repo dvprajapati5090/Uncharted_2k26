@@ -37,7 +37,11 @@ jobs:
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_BASE_REF: ${{ github.base_ref }}
         run: |
-          node scripts/pr-linter.js --output-file pr-compliance-report.md
+          if [ -f "scripts/pr-linter.mjs" ]; then
+            node scripts/pr-linter.mjs --output-file pr-compliance-report.md
+          else
+            node scripts/pr-linter.js --output-file pr-compliance-report.md
+          fi
         continue-on-error: true
 
       - name: Comment PR Compliance Report
