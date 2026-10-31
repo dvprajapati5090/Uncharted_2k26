@@ -376,7 +376,9 @@ export default function App() {
   const loadMemories = async (statusOverride) => {
     try {
       const filter = statusOverride !== undefined ? statusOverride : ledgerFilter;
-      const res = await fetch(`/api/memories?status=${filter}`);
+      const teamId = activeTeam?.id || 'ws_core';
+      const userId = activeUser?.id || '';
+      const res = await fetch(`/api/memories?status=${filter}&workspaceId=${encodeURIComponent(teamId)}&userId=${encodeURIComponent(userId)}`);
       const data = await res.json();
       setMemories(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -1492,7 +1494,7 @@ export default function App() {
                       {!msg.is_assistant && msg.memories_extracted?.length > 0 && (
                         <div className="pl-8 pt-1 flex items-center gap-2">
                           <div
-                            onClick={() => { setActiveTab('ledger'); loadMemories(); }}
+                            onClick={() => { setActiveTab('ledger'); loadMemories(); loadGraphData(); loadHierarchyData(); }}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 shadow cursor-pointer hover:bg-emerald-500/20 transition memory-pulse-card"
                           >
                             <BrainCircuit className="w-3.5 h-3.5 text-emerald-400" />

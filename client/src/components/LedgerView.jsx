@@ -175,7 +175,7 @@ export default function LedgerView({
               <span className="hidden sm:inline">Cards</span>
             </button>
             <button
-              onClick={() => setLedgerView('graph')}
+              onClick={() => { setLedgerView('graph'); if (loadGraphData) loadGraphData(); }}
               className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
                 ledgerView === 'graph' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
               }`}
@@ -185,7 +185,7 @@ export default function LedgerView({
               <span className="hidden sm:inline">Graph</span>
             </button>
             <button
-              onClick={() => setLedgerView('hierarchy')}
+              onClick={() => { setLedgerView('hierarchy'); if (loadHierarchyData) loadHierarchyData(); }}
               className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
                 ledgerView === 'hierarchy' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
               }`}
@@ -581,6 +581,8 @@ export default function LedgerView({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {hierarchyData.clusters?.map((cluster) => {
                 const isSelected = selectedCluster?.id === cluster.id;
+                const clusterDecisions = cluster.decisions || cluster.children || [];
+                const clusterDesc = cluster.description || cluster.macroDirective || cluster.summary || 'Authoritative architectural domain directive.';
                 return (
                   <div
                     key={cluster.id}
@@ -595,22 +597,22 @@ export default function LedgerView({
                       <span className="font-bold text-xs text-white flex items-center gap-2">
                         <span>📁</span> {cluster.name}
                       </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/10 text-neutral-300">
-                        {cluster.decisions?.length || 0} decisions
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/10 text-neutral-300 font-bold">
+                        {clusterDecisions.length} decisions
                       </span>
                     </div>
-                    <p className="text-[11px] text-neutral-400 mb-3">{cluster.description}</p>
+                    <p className="text-[11px] text-neutral-400 mb-3">{clusterDesc}</p>
 
                     {/* Nested decisions */}
                     <div className="space-y-1.5 pl-2 border-l border-white/10">
-                      {cluster.decisions?.slice(0, 3).map((d, dIdx) => (
+                      {clusterDecisions.slice(0, 4).map((d, dIdx) => (
                         <div key={dIdx} className="text-[10px] text-neutral-300 truncate">
-                          • {d.decision || d.topic}
+                          • {d.decision || d.statement || d.topic}
                         </div>
                       ))}
-                      {(cluster.decisions?.length || 0) > 3 && (
+                      {clusterDecisions.length > 4 && (
                         <div className="text-[9px] text-neutral-500 italic">
-                          +{cluster.decisions.length - 3} more decisions...
+                          +{clusterDecisions.length - 4} more decisions...
                         </div>
                       )}
                     </div>
