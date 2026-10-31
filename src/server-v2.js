@@ -745,12 +745,12 @@ const server = http.createServer(async (req, res) => {
     // 7. SEED & WIPE
     // ----------------------------------------------------
     if (req.method === 'POST' && pathname === '/api/wipe') {
-      wipeAllStoredData();
+      await wipeAllStoredData();
       return sendJson(res, 200, { message: 'Memory store wiped successfully.' });
     }
 
     if (req.method === 'POST' && pathname === '/api/demo/seed') {
-      wipeAllStoredData();
+      await wipeAllStoredData();
       setSimulatedTime('2026-10-30T10:00:00.000Z');
 
       // Seed Demo 1: Core stack decisions & constraints

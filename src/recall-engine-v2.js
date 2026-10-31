@@ -1,5 +1,5 @@
 import { embedQuery } from './providers/embedding-provider.js';
-import { executeAtlasVectorSearch, getMemoryById } from './db-mongo.js';
+import { executeAtlasVectorSearch, getMemoryById, findMemories } from './db-mongo.js';
 import { getAppNow, refreshExpirations } from './memory-engine-v2.js';
 import { generateMultiModelAnswer } from './providers/llm-provider.js';
 
@@ -12,100 +12,131 @@ export async function recallMemories({
   workspaceId,
   scope = 'all',
   isHistorical = false,
-  model = 'gemini-2.5-flash',
+  model = 'gemini-3-flash-preview',
   apiKey = ''
 }) {
   await refreshExpirations();
   const now = getAppNow();
 
-  // 1. Embed query into 1024D vector using Voyage provider
-  const queryVector = await embedQuery(query);
-
-  // 2. Build MongoDB $vectorSearch filter
-  const filter = {
-    $and: []
-  };
-
-  if (!isHistorical) {
-    filter.$and.push({ status: { $eq: 'active' } });
-  }
-
-  // Pre-filter: Scope isolation
-  // Users only search personal memory + authorized workspace memory
   const allowedOwnerId = user?.id || 'u_sarah';
   const allowedWorkspaceId = workspaceId || 'ws_core';
 
-  // 3. Execute genuine $vectorSearch against MongoDB Atlas (or local engine)
-  const rawResults = await executeAtlasVectorSearch({
-    queryVector,
-    limit: 10,
-    numCandidates: 100,
-    filter: {
-      workspaceId: allowedWorkspaceId
-    }
-  });
+  // Detect broad ledger summary queries (e.g. "Give me all the memory ledger", "List all decisions")
+  const isBroadLedgerQuery = /all\s+(?:the\s+)?(?:memory|memories|ledger|decisions|constraints)|list\s+(?:all\s+)?(?:memories|ledger|decisions)|show\s+(?:all\s+)?(?:memories|ledger|decisions)|give\s+(?:me\s+)?all|summary\s+of\s+memories|what\s+(?:are\s+)?(?:all\s+)?(?:the\s+)?decisions/i.test(query.trim());
 
-  // 4. Server-Side Secondary Verification (Guarantees privacy & temporal safety)
-  const selectedMemories = [];
+  let selectedMemories = [];
   const rejectedMemories = [];
 
-  for (const candidate of rawResults) {
-    const isOwnerMatch = candidate.scope === 'workspace' 
-      ? candidate.workspaceId === allowedWorkspaceId 
-      : candidate.ownerId === allowedOwnerId;
+  if (isBroadLedgerQuery) {
+    const allActive = await findMemories({
+      workspaceId: allowedWorkspaceId,
+      status: 'active'
+    });
+    selectedMemories = allActive.filter(mem => {
+      return mem.scope === 'workspace' 
+        ? mem.workspaceId === allowedWorkspaceId 
+        : mem.ownerId === allowedOwnerId;
+    });
+  } else {
+    // 1. Embed query into 1024D vector using Voyage provider
+    const queryVector = await embedQuery(query);
 
-    if (!isOwnerMatch) {
-      rejectedMemories.push({
-        id: candidate._id.toString(),
-        topic: candidate.topic,
-        reason: 'Ownership scope mismatch (private to another user)',
-        score: candidate.score,
-        statement: candidate.content?.statement
-      });
-      continue;
+    // 2. Execute $vectorSearch against MongoDB Atlas
+    const rawResults = await executeAtlasVectorSearch({
+      queryVector,
+      limit: 10,
+      numCandidates: 100,
+      filter: {
+        workspaceId: allowedWorkspaceId
+      }
+    });
+
+    const qWords = query.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2);
+
+    // 3. Server-Side Secondary Verification (Guarantees privacy & temporal safety)
+    for (const candidate of rawResults) {
+      const isOwnerMatch = candidate.scope === 'workspace' 
+        ? candidate.workspaceId === allowedWorkspaceId 
+        : candidate.ownerId === allowedOwnerId;
+
+      if (!isOwnerMatch) {
+        rejectedMemories.push({
+          id: candidate._id.toString(),
+          topic: candidate.topic,
+          reason: 'Ownership scope mismatch (private to another user)',
+          score: candidate.score,
+          statement: candidate.content?.statement
+        });
+        continue;
+      }
+
+      if (!isHistorical && candidate.status === 'superseded') {
+        const replacer = candidate.supersededBy ? await getMemoryById(candidate.supersededBy) : null;
+        rejectedMemories.push({
+          id: candidate._id.toString(),
+          topic: candidate.topic,
+          reason: `Superseded by newer decision "${replacer?.content?.statement || 'updated directive'}"`,
+          score: candidate.score,
+          statement: candidate.content?.statement
+        });
+        continue;
+      }
+
+      const isExpired = candidate.status === 'expired' || (candidate.validUntil && new Date(candidate.validUntil) < now);
+      if (!isHistorical && isExpired) {
+        const dateStr = candidate.validUntil 
+          ? new Date(candidate.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'scheduled date';
+        rejectedMemories.push({
+          id: candidate._id.toString(),
+          topic: candidate.topic,
+          reason: `Logically expired on ${dateStr}`,
+          score: candidate.score,
+          statement: candidate.content?.statement,
+          validUntil: candidate.validUntil,
+          isExpired: true
+        });
+        continue;
+      }
+
+      const candText = ((candidate.content?.statement || '') + ' ' + (candidate.topic || '')).toLowerCase();
+      const hasEntityMatch = qWords.some(w => candText.includes(w));
+      const threshold = hasEntityMatch ? 0.10 : 0.25;
+
+      if (candidate.score < threshold) {
+        rejectedMemories.push({
+          id: candidate._id.toString(),
+          topic: candidate.topic,
+          reason: `Relevance score too low (${candidate.score})`,
+          score: candidate.score,
+          statement: candidate.content?.statement
+        });
+        continue;
+      }
+
+      selectedMemories.push(candidate);
     }
 
-    if (!isHistorical && candidate.status === 'superseded') {
-      const replacer = candidate.supersededBy ? await getMemoryById(candidate.supersededBy) : null;
-      rejectedMemories.push({
-        id: candidate._id.toString(),
-        topic: candidate.topic,
-        reason: `Superseded by newer decision "${replacer?.content?.statement || 'updated directive'}"`,
-        score: candidate.score,
-        statement: candidate.content?.statement
+    // Hybrid keyword fallback: if vector search missed active memories containing query entities (e.g. dynamodb, redis)
+    if (selectedMemories.length === 0) {
+      const allActive = await findMemories({
+        workspaceId: allowedWorkspaceId,
+        status: 'active'
       });
-      continue;
-    }
+      for (const mem of allActive) {
+        const isOwnerMatch = mem.scope === 'workspace' 
+          ? mem.workspaceId === allowedWorkspaceId 
+          : mem.ownerId === allowedOwnerId;
+        if (!isOwnerMatch) continue;
 
-    const isExpired = candidate.status === 'expired' || (candidate.validUntil && new Date(candidate.validUntil) < now);
-    if (!isHistorical && isExpired) {
-      const dateStr = candidate.validUntil 
-        ? new Date(candidate.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : 'scheduled date';
-      rejectedMemories.push({
-        id: candidate._id.toString(),
-        topic: candidate.topic,
-        reason: `Logically expired on ${dateStr}`,
-        score: candidate.score,
-        statement: candidate.content?.statement,
-        validUntil: candidate.validUntil,
-        isExpired: true
-      });
-      continue;
+        const memText = ((mem.content?.statement || '') + ' ' + (mem.topic || '')).toLowerCase();
+        if (qWords.some(w => w.length > 3 && memText.includes(w))) {
+          if (!selectedMemories.some(s => s._id.toString() === mem._id.toString())) {
+            selectedMemories.push(mem);
+          }
+        }
+      }
     }
-
-    if (candidate.score < 0.25) {
-      rejectedMemories.push({
-        id: candidate._id.toString(),
-        topic: candidate.topic,
-        reason: `Relevance score too low (${candidate.score})`,
-        score: candidate.score,
-        statement: candidate.content?.statement
-      });
-      continue;
-    }
-
-    selectedMemories.push(candidate);
   }
 
   // 5. Generate Multi-Model Grounded Answer & Dual-Mode Baseline (with memory vs. without memory)

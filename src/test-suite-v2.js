@@ -39,7 +39,7 @@ import { generateEnterpriseAdrDossier } from './dossier-exporter.js';
 
 console.log('🧪 Starting SynapseMem 2.0 (MongoDB Agentic Memory) Verification Tests...\n');
 
-await initMongo();
+await initMongo('synapsemem_test');
 await wipeAllStoredData();
 setSimulatedTime('2026-10-30T10:00:00.000Z');
 
