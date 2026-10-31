@@ -204,7 +204,7 @@ export default function LandingPage({
               className="lede appear appear--soft"
               style={{ '--d': '0.82s', animationDuration: '1.1s' }}
             >
-              Captures team decisions into MongoDB vector memory with lineage tracking, auto-expiry, and multi-agent consensus — so LLMs never hallucinate past constraints.
+              Autonomous team memory with <strong className="text-emerald-400 font-semibold">GitHub Guardian</strong> — scans every Pull Request for architecture violations, synchronizes Living ADRs, and grounds LLM responses with zero chat bloat.
             </p>
 
             {/* Focused Action CTAs */}
@@ -239,11 +239,13 @@ export default function LandingPage({
           </div>
 
           <div className="stat appear appear--stat" style={{ '--d': '1.24s' }}>
-            <svg className="stat-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <circle cx="12" cy="12" r="9" />
-              <polyline points="12 6 12 12 16 14" />
+            <svg className="stat-icon text-emerald-400" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="18" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+              <line x1="6" y1="9" x2="6" y2="21" />
             </svg>
-            <span>Automated Lineage &amp; Temporal TTL</span>
+            <span className="text-white"><strong className="text-emerald-300">GitHub Guardian:</strong> Autonomous PR Linter &amp; ADR Sync</span>
           </div>
 
           <div className="stat appear appear--stat" style={{ '--d': '1.36s' }}>
