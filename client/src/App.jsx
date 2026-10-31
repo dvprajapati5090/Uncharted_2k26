@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import LandingPage from './components/LandingPage';
 import {
   BrainCircuit,
   Building2,
@@ -50,6 +51,15 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('view') === 'app' || window.location.hash === '#app') {
+        return 'app';
+      }
+    }
+    return 'landing';
+  });
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'ledger' | 'training'
   const [currentChannel, setCurrentChannel] = useState('architecture');
   const [channels, setChannels] = useState([]);
@@ -968,163 +978,214 @@ export default function App() {
     setAddModalOpen(true);
   };
 
+  if (viewMode === 'landing') {
+    return (
+      <LandingPage
+        onEnterApp={() => setViewMode('app')}
+        onEnterDemo={() => {
+          setViewMode('app');
+          handleRunGuidedDemo();
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 select-none">
+    <div className="flex flex-col h-screen bg-black text-white select-none overflow-hidden font-sans">
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl border shadow-2xl text-xs font-semibold flex items-center gap-2 animate-bounce ${
           toast.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700' :
           toast.type === 'warning' ? 'bg-amber-950/90 text-amber-300 border-amber-700' :
-          'bg-indigo-950/90 text-indigo-200 border-indigo-700'
+          'bg-neutral-900/95 text-white border-white/20'
         }`}>
           <span>{toast.msg}</span>
         </div>
       )}
 
-      {/* Top Header */}
-      <header className="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0">
+      {/* Top Header - Symmetrical, Balanced, Liquid-Metal Styling */}
+      <header className="h-14 border-b border-white/10 bg-black/90 backdrop-blur-xl px-4 flex items-center justify-between shrink-0 z-30">
+        {/* Left: Brand + Landing Backlink + Status */}
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
-            <BrainCircuit className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-sm font-black tracking-tight text-white flex items-center gap-2">
-              SynapseMem 2.0
-              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold border border-emerald-800/80">MongoDB Atlas</span>
+          <button
+            onClick={() => setViewMode('landing')}
+            className="flex items-center gap-2.5 group cursor-pointer focus:outline-none text-left"
+            title="Return to Landing Page"
+          >
+            <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg transition group-hover:border-white/50 group-hover:bg-white/20">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <g transform="rotate(-30 12 12)">
+                  <circle cx="7.3" cy="3.2" r="1.45" />
+                  <rect x="5.5" y="4.7" width="3.6" height="14.6" rx="1.8" />
+                  <rect x="14.9" y="4.7" width="3.6" height="14.6" rx="1.8" />
+                  <circle cx="16.7" cy="20.8" r="1.45" />
+                </g>
+              </svg>
             </div>
-            <div className="text-[10px] text-slate-400">Memory Operating System for AI Agents</div>
-          </div>
+            <div>
+              <div className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
+                <span>Vesper<span className="font-normal text-white/60">.ai</span></span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-neutral-300 font-mono border border-white/15">
+                  SynapseMem 2.0
+                </span>
+              </div>
+              <div className="text-[10px] text-neutral-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                MongoDB Atlas Engine
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setViewMode('landing')}
+            className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/25 transition ml-1"
+          >
+            ← Overview
+          </button>
         </div>
 
-        {/* Center Navigation Tabs */}
-        <nav className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+        {/* Center Navigation Tabs - Equal Width Liquid Metal Pills */}
+        <nav className="flex items-center gap-1.5 bg-neutral-950 p-1 rounded-xl border border-white/15 text-xs shadow-inner">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
-              activeTab === 'chat' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            className={`app-nav-pill ${activeTab === 'chat' ? 'active' : ''}`}
           >
-            <Bot className="w-4 h-4 text-indigo-300" /> Chatbot
+            <Bot className="w-3.5 h-3.5" /> <span>Chatbot</span>
           </button>
           <button
             onClick={() => { setActiveTab('ledger'); loadMemories(); }}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
-              activeTab === 'ledger' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            className={`app-nav-pill ${activeTab === 'ledger' ? 'active' : ''}`}
           >
-            <Database className="w-4 h-4 text-indigo-300" /> Memory Ledger
-            <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[10px] font-bold text-slate-300">
+            <Database className="w-3.5 h-3.5" /> <span>Memory Ledger</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'ledger' ? 'bg-black text-white' : 'bg-white/10 text-neutral-300'}`}>
               {memories.length}
             </span>
           </button>
           <button
             onClick={() => { setActiveTab('training'); loadTrainingData(); }}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
-              activeTab === 'training' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            className={`app-nav-pill ${activeTab === 'training' ? 'active' : ''}`}
           >
-            <GraduationCap className="w-4 h-4 text-indigo-300" /> Training & DPO
-            <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">
+            <GraduationCap className="w-3.5 h-3.5" /> <span>Training & DPO</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'training' ? 'bg-black text-white' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'}`}>
               {trainingStats.dpoPairsCount}
             </span>
           </button>
           <button
             onClick={() => { setActiveTab('consensus'); loadConsensusData(); }}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition ${
-              activeTab === 'consensus' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            className={`app-nav-pill ${activeTab === 'consensus' ? 'active' : ''}`}
           >
-            <Vote className="w-4 h-4 text-purple-300" /> Consensus & Quorum
-            <span className="px-1.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
+            <Vote className="w-3.5 h-3.5" /> <span>Consensus</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'consensus' ? 'bg-black text-white' : 'bg-purple-950 text-purple-300 border border-purple-800'}`}>
               {consensusStats.totalProposals || consensusHistory.length || 0}
             </span>
           </button>
         </nav>
 
-        {/* Right Menu & User */}
-        <div className="flex items-center space-x-2">
-          {/* Live Sync Drawer Trigger */}
+        {/* Right Menu & Universal Tool Dock with Equal Spacing */}
+        <div className="flex items-center gap-1.5">
+          {/* Universal Model Selector */}
+          <div className="flex items-center gap-1 bg-neutral-950 px-2 py-1 rounded-lg border border-white/15 text-xs shadow-sm">
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="bg-transparent text-white font-medium focus:outline-none cursor-pointer text-xs"
+            >
+              <option value="gemini-3-flash-preview" className="bg-neutral-900 text-white">Gemini 3 Flash</option>
+              <option value="gemini-3.1-flash-lite" className="bg-neutral-900 text-white">Gemini 3.1 Flash Lite</option>
+              <option value="claude-3-5-sonnet" className="bg-neutral-900 text-white">Claude 3.5 Sonnet</option>
+              <option value="local-grounded" className="bg-neutral-900 text-white">Local Atlas Engine</option>
+            </select>
+            <button
+              onClick={() => { loadLlmModels(); setLlmModalOpen(true); }}
+              className="p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition ml-0.5"
+              title="Configure API Keys"
+            >
+              <Key className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Equal Spaced Tool Dock Buttons */}
+          <button
+            onClick={() => { setBenchmarkModalOpen(true); if (!benchmarkData) loadBenchmarkData(); }}
+            className="tool-dock-btn"
+            title="Live Comparative Benchmark Matrix"
+          >
+            <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden xl:inline">Benchmark</span>
+          </button>
+
+          <button
+            onClick={handleExportDossier}
+            disabled={isExportingDossier}
+            className="tool-dock-btn"
+            title="Export Architecture Decision Record (ADR) Dossier"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden xl:inline">ADR Dossier</span>
+          </button>
+
           <button
             onClick={() => { setRealtimeDrawerOpen(true); loadRealtimeData(); }}
-            className="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 transition shadow"
+            className="tool-dock-btn"
             title="Real-Time Change Stream Sync"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
             <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Live Sync</span>
-            <span className="px-1 py-0.2 rounded bg-emerald-900 text-emerald-200 text-[10px] font-bold">
+            <span className="hidden xl:inline">Live Sync</span>
+            <span className="px-1 py-0.2 rounded bg-white/10 text-[10px] font-bold">
               {realtimeHistory.length}
             </span>
           </button>
 
-          {/* Benchmark Modal Trigger */}
-          <button
-            onClick={() => { setBenchmarkModalOpen(true); if (!benchmarkData) loadBenchmarkData(); }}
-            className="px-2.5 py-1.5 rounded-lg bg-purple-950/70 hover:bg-purple-900 border border-purple-700/60 text-purple-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
-            title="Live Comparative Benchmark Matrix"
-          >
-            <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Benchmark</span>
-          </button>
-
-          {/* Export ADR Dossier */}
-          <button
-            onClick={handleExportDossier}
-            disabled={isExportingDossier}
-            className="px-2.5 py-1.5 rounded-lg bg-blue-950/70 hover:bg-blue-900 border border-blue-700/60 text-blue-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
-            title="Export Architecture Decision Record (ADR) Dossier"
-          >
-            <FileText className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden sm:inline">ADR Dossier</span>
-          </button>
-
-          <button
-            onClick={handleWipeData}
-            className="px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 font-semibold text-xs flex items-center gap-1.5 transition"
-            title="Wipe & Reset Memory Database"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
-
           <button
             onClick={handleRunGuidedDemo}
-            className="px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold text-xs flex items-center gap-1.5 transition"
+            className="tool-dock-btn bg-white/15 text-white border-white/30 hover:bg-white/25 font-semibold"
             title="Run 5-Step Demo"
           >
-            <PlayCircle className="w-4 h-4 text-indigo-400" />
+            <PlayCircle className="w-3.5 h-3.5 text-white" />
             <span className="hidden sm:inline">Guided Demo</span>
           </button>
 
           <button
             onClick={() => setTimeMachineOpen(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center gap-1.5 text-xs font-semibold"
+            className="tool-dock-btn"
             title="Time Machine (Temporal Expiry)"
           >
             <History className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">
+            <span className="hidden lg:inline">
               {new Date(simulatedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           </button>
 
           <button
-            onClick={() => setInspectOpen(!inspectOpen)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition ${
-              inspectOpen ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
-            }`}
+            onClick={handleWipeData}
+            className="tool-dock-btn hover:border-rose-500/50 hover:text-rose-300"
+            title="Wipe & Reset Memory Database"
           >
-            <ScanEye className="w-4 h-4 text-indigo-300" />
-            <span className="hidden sm:inline">Inspect</span>
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden 2xl:inline">Reset</span>
+          </button>
+
+          <button
+            onClick={() => setInspectOpen(!inspectOpen)}
+            className={`tool-dock-btn ${
+              inspectOpen ? 'bg-white/25 border-white/50 text-white' : ''
+            }`}
+            title="Vector Inspection Drawer"
+          >
+            <ScanEye className="w-3.5 h-3.5 text-white" />
+            <span className="hidden xl:inline">Inspect</span>
           </button>
 
           {/* Active User Avatar */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow">
+          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+            <div className="w-7 h-7 rounded-full bg-white text-black font-bold flex items-center justify-center text-xs shadow">
               {activeUser?.avatar || 'U'}
             </div>
-            <div className="hidden md:block text-left">
-              <span className="block text-xs font-bold text-slate-200 leading-tight">{activeUser?.name}</span>
-              <span className="block text-[10px] text-slate-400 leading-tight">{activeUser?.role}</span>
+            <div className="hidden 2xl:block text-left">
+              <span className="block text-xs font-semibold text-neutral-200 leading-tight">{activeUser?.name}</span>
+              <span className="block text-[10px] text-neutral-400 leading-tight">{activeUser?.role}</span>
             </div>
           </div>
         </div>
@@ -1136,8 +1197,8 @@ export default function App() {
         {activeTab === 'chat' && (
           <div className="flex-1 flex overflow-hidden">
             {/* Left Channels Sidebar */}
-            <aside className="w-56 border-r border-slate-800 bg-slate-950/60 flex flex-col shrink-0">
-              <div className="p-3 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+            <aside className="w-56 border-r border-white/10 bg-neutral-950/90 flex flex-col shrink-0">
+              <div className="p-3 border-b border-white/10 text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
                 <span>Channels</span>
                 <span className="text-emerald-400 flex items-center gap-1 font-mono">
                   <ShieldCheck className="w-3 h-3" /> MongoDB
@@ -1153,18 +1214,18 @@ export default function App() {
                       onClick={() => setCurrentChannel(ch.id)}
                       className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between text-xs transition ${
                         isActive
-                          ? 'bg-indigo-950/80 text-white font-semibold border border-indigo-700/50'
-                          : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                          ? 'bg-white/15 text-white font-semibold border border-white/25 shadow-sm'
+                          : 'text-neutral-400 hover:bg-white/5 hover:text-white'
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <span className={isActive ? 'text-indigo-400 font-bold' : 'text-slate-500'}>
+                        <span className={isActive ? 'text-white font-bold' : 'text-neutral-500'}>
                           {isBot ? '🤖' : '#'}
                         </span>
                         <span className="truncate">{isBot ? 'AI Assistant' : ch.id}</span>
                       </div>
                       {isBot && (
-                        <span className="text-[9px] bg-indigo-900/80 text-indigo-300 px-1.5 py-0.5 rounded font-bold uppercase">
+                        <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.5 rounded font-bold uppercase">
                           Recall
                         </span>
                       )}
@@ -1173,20 +1234,20 @@ export default function App() {
                 })}
               </nav>
 
-              <div className="p-3 border-t border-slate-800 bg-slate-900/30 text-[11px] text-slate-400 flex items-center justify-between">
+              <div className="p-3 border-t border-white/10 bg-black/50 text-[11px] text-neutral-400 flex items-center justify-between">
                 <span>1024D Voyage Vectors</span>
                 <span className="font-bold text-emerald-400">Active</span>
               </div>
             </aside>
 
             {/* Chat Stream Area */}
-            <div className="flex-1 flex flex-col overflow-hidden bg-slate-900/50">
+            <div className="flex-1 flex flex-col overflow-hidden bg-black/40">
               {/* Channel Header */}
-              <div className="h-11 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/40">
+              <div className="h-11 border-b border-white/10 px-4 flex items-center justify-between bg-black/60 backdrop-blur">
                 <div className="flex items-center gap-2">
-                  <span className="text-indigo-400 font-bold text-xs">{currentChannel === 'ask-assistant' ? '🤖' : '#'}</span>
-                  <span className="font-bold text-xs text-slate-200">{currentChannel}</span>
-                  <span className="text-[11px] text-slate-400 border-l border-slate-700 pl-2 hidden sm:inline">
+                  <span className="text-white font-bold text-xs">{currentChannel === 'ask-assistant' ? '🤖' : '#'}</span>
+                  <span className="font-bold text-xs text-white">{currentChannel}</span>
+                  <span className="text-[11px] text-neutral-400 border-l border-white/15 pl-2 hidden sm:inline">
                     {currentChannel === 'ask-assistant'
                       ? 'Queries MongoDB Atlas using $vectorSearch with zero chat history injected'
                       : 'Decisions and constraints are structured and embedded into MongoDB'}
@@ -1194,36 +1255,8 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  {currentChannel === 'ask-assistant' && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800 text-xs shadow">
-                        <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                        <select
-                          value={selectedModel}
-                          onChange={(e) => setSelectedModel(e.target.value)}
-                          className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer text-xs"
-                        >
-                          <option value="gemini-3-flash-preview" className="bg-slate-900 text-slate-200">⚡ Gemini 3 Flash</option>
-                          <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-slate-200">⚡ Gemini 3.1 Flash Lite</option>
-                          <option value="claude-3-5-sonnet" className="bg-slate-900 text-slate-200">🔮 Claude 3.5 Sonnet</option>
-                          <option value="local-grounded" className="bg-slate-900 text-slate-200">⚙️ Local Atlas Engine</option>
-                        </select>
-                      </div>
-                      <button
-                        onClick={() => {
-                          loadLlmModels();
-                          setLlmModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-indigo-600 text-slate-400 hover:text-indigo-300 transition"
-                        title="Configure Gemini & Claude API Keys"
-                      >
-                        <Key className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="text-[10px] text-indigo-400 font-medium flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                  <div className="text-[10px] text-neutral-300 font-medium flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-white" />
                     <span className="hidden sm:inline">Agentic Memory Active</span>
                   </div>
                 </div>
@@ -1454,11 +1487,11 @@ export default function App() {
                         ? 'Ask the assistant (e.g. "Design a background job system...", "What database are we using?")...'
                         : 'Share a team decision or constraint (e.g. "Do not introduce Redis without approval")...'
                     }
-                    className="flex-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="flex-1 bg-neutral-900/90 border border-white/15 focus:border-white/40 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none transition shadow-inner"
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1.5 transition shadow"
+                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-semibold text-xs flex items-center gap-1.5 transition shadow"
                   >
                     <span>Send</span>
                     <Send className="w-3.5 h-3.5" />
