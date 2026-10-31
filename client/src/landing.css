@@ -26,9 +26,9 @@
   --header-x: 40px;
   --stats-x: 72px;
   --stats-y: 36px;
-  --hero-gap: 85px;
+  --hero-gap: 24px;
   --copy-max: 860px;
-  --lede-max: 470px;
+  --lede-max: 600px;
 }
 
 /* Base resets & black lock */
@@ -344,10 +344,12 @@ body.menu-open .burger-bar:nth-child(3) {
 /* Hero Section */
 main.hero {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding: 8px 24px var(--hero-gap);
+  padding: 24px 24px;
   min-height: 0;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .hero-copy {
@@ -436,8 +438,8 @@ h1.hero-headline em {
 footer.stats {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  justify-content: center;
+  gap: 36px;
   padding: 0 var(--stats-x) var(--stats-y);
   padding-bottom: max(var(--stats-y), env(safe-area-inset-bottom));
   color: #d8d8d8;
