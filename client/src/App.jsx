@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import LandingPage from './components/LandingPage';
 import AuthPage from './components/AuthPage';
+import AppSidebar from './components/AppSidebar';
+import LedgerView from './components/LedgerView';
+import TrainingView from './components/TrainingView';
+import ConsensusView from './components/ConsensusView';
 import {
   BrainCircuit,
   Building2,
@@ -192,6 +196,9 @@ export default function App() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [ledgerFilter, setLedgerFilter] = useState('all');
   const [ledgerView, setLedgerView] = useState('cards'); // 'cards' | 'graph'
+  const [ledgerConfidenceMin, setLedgerConfidenceMin] = useState(50);
+  const [consensusQuorumThreshold, setConsensusQuorumThreshold] = useState(67);
+  const [timeScrubberDays, setTimeScrubberDays] = useState(0);
   const [graphData, setGraphData] = useState({ nodes: [], edges: [], summary: {} });
   const [selectedGraphNode, setSelectedGraphNode] = useState(null);
   const [graphLineage, setGraphLineage] = useState(null);
@@ -1439,118 +1446,58 @@ export default function App() {
 
       {/* Main Container */}
       <div className="flex-1 flex overflow-hidden relative">
+        <AppSidebar
+          activeTab={activeTab}
+          setActiveTab={(tab) => {
+            setActiveTab(tab);
+            if (tab === 'ledger') loadMemories();
+            if (tab === 'training') loadTrainingData();
+            if (tab === 'consensus') loadConsensusData();
+          }}
+          sidebarPinned={sidebarPinned}
+          setSidebarPinned={setSidebarPinned}
+          sidebarHovered={sidebarHovered}
+          handleSidebarMouseEnter={handleSidebarMouseEnter}
+          handleSidebarMouseLeave={handleSidebarMouseLeave}
+          activeTeam={activeTeam}
+          activeUser={activeUser}
+          memories={memories}
+          trainingStats={trainingStats}
+          consensusStats={consensusStats}
+          channels={channels}
+          currentChannel={currentChannel}
+          setCurrentChannel={setCurrentChannel}
+          messages={messages}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          onOpenLlmModal={() => { loadLlmModels(); setLlmModalOpen(true); }}
+          onRunGuidedDemo={handleRunGuidedDemo}
+          onOpenGithubModal={() => setGithubModalOpen(true)}
+          onOpenBenchmarkModal={() => { setBenchmarkModalOpen(true); if (!benchmarkData) loadBenchmarkData(); }}
+          onOpenTimeMachine={() => setTimeMachineOpen(true)}
+          onOpenInspect={() => setInspectOpen(!inspectOpen)}
+          inspectOpen={inspectOpen}
+          onExportDossier={handleExportDossier}
+          isExportingDossier={isExportingDossier}
+          onWipeData={handleWipeData}
+          onOpenRealtimeDrawer={() => { setRealtimeDrawerOpen(true); loadRealtimeData(); }}
+          realtimeHistory={realtimeHistory}
+          onBackToLanding={() => setViewMode('landing')}
+          onLogout={() => { setViewMode('auth'); showToast('Signed out of workspace', 'info'); }}
+          ledgerView={ledgerView}
+          setLedgerView={setLedgerView}
+          ledgerFilter={ledgerFilter}
+          setLedgerFilter={setLedgerFilter}
+          ledgerConfidenceMin={ledgerConfidenceMin}
+          setLedgerConfidenceMin={setLedgerConfidenceMin}
+          consensusQuorumThreshold={consensusQuorumThreshold}
+          setConsensusQuorumThreshold={setConsensusQuorumThreshold}
+          onOpenAddModal={() => openAddModal()}
+        />
+
         {/* VIEW 1: CHATBOT */}
         {activeTab === 'chat' && (
           <div className="flex-1 flex overflow-hidden relative">
-            {/* Left Hover-Activated Sliding Sidebar with Smooth GPU Transform */}
-            <aside
-              className={`premium-sidebar-container ${sidebarPinned || sidebarHovered ? 'is-expanded' : 'is-collapsed'}`}
-              onMouseEnter={handleSidebarMouseEnter}
-              onMouseLeave={handleSidebarMouseLeave}
-            >
-              <div className="w-[260px] h-full flex flex-col justify-between bg-[#050505] select-none shrink-0">
-                {/* Top Section */}
-                <div className="flex flex-col">
-                  {/* Workspace Switcher Header */}
-                  <div className="h-14 px-3 border-b border-white/10 flex items-center justify-between bg-black/60">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        onClick={() => setSidebarPinned(!sidebarPinned)}
-                        className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white text-xs font-bold shrink-0 cursor-pointer hover:border-white/40 transition"
-                        title={sidebarPinned ? 'Sidebar Locked (Click to auto-collapse)' : 'Click to pin sidebar'}
-                      >
-                        <Building2 className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="truncate">
-                        <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                          <span>{activeTeam?.name || 'Atlas Core Engineers'}</span>
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-mono">Tenant: {activeTeam?.id || 'ws_core'}</div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setSidebarPinned(!sidebarPinned)}
-                      className={`p-1.5 rounded-lg text-xs transition border ${
-                        sidebarPinned
-                          ? 'bg-white/20 border-white/40 text-white'
-                          : 'border-white/10 text-neutral-400 hover:text-white hover:bg-white/10'
-                      }`}
-                      title={sidebarPinned ? 'Unpin Sidebar (Auto-collapse on leave)' : 'Pin Sidebar Open'}
-                    >
-                      <Pin className={`w-3.5 h-3.5 ${sidebarPinned ? 'text-white' : 'text-neutral-400'}`} />
-                    </button>
-                  </div>
-
-                  {/* Channels Label */}
-                  <div className="px-3.5 pt-3.5 pb-2 text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
-                    <span>Channels</span>
-                    <span className="text-emerald-400 flex items-center gap-1 font-mono text-[9px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Atlas Sync
-                    </span>
-                  </div>
-
-                  {/* Channel Nav Items */}
-                  <nav className="p-2 space-y-1">
-                    {channels.map((ch) => {
-                      const isBot = ch.id === 'ask-assistant';
-                      const isActive = ch.id === currentChannel;
-                      return (
-                        <button
-                          key={ch.id}
-                          onClick={() => setCurrentChannel(ch.id)}
-                          className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between text-xs transition ${
-                            isActive
-                              ? 'bg-white text-black font-semibold shadow-lg shadow-white/10'
-                              : 'text-neutral-300 hover:bg-white/5 hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 truncate">
-                            <span className={`text-xs ${isActive ? 'text-black font-bold' : 'text-neutral-400'}`}>
-                              {isBot ? '🤖' : '#'}
-                            </span>
-                            <span className="truncate">{isBot ? 'AI Assistant' : ch.id}</span>
-                          </div>
-                          {isBot ? (
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                              isActive ? 'bg-black text-white' : 'bg-white/10 text-neutral-300'
-                            }`}>
-                              Recall
-                            </span>
-                          ) : (
-                            <span className={`text-[10px] font-mono ${isActive ? 'text-black/70' : 'text-neutral-500'}`}>
-                              {messages.filter(m => m.channel === ch.id).length || ''}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </nav>
-                </div>
-
-                {/* Footer Status & Pin Controls */}
-                <div className="p-3 border-t border-white/10 bg-black/60 text-[11px] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-neutral-400">Vector Engine</span>
-                    <span className="text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> 1024D Voyage
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                    <span className="text-[10px] text-neutral-500 font-mono">
-                      {sidebarPinned ? 'Sidebar Locked' : 'Auto-Hover Active'}
-                    </span>
-                    <button
-                      onClick={() => setSidebarPinned(!sidebarPinned)}
-                      className="text-[10px] text-neutral-400 hover:text-white underline cursor-pointer"
-                    >
-                      {sidebarPinned ? 'Auto-hide' : 'Pin'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </aside>
-
             {/* Chat Stream Area */}
             <div className="flex-1 flex flex-col overflow-hidden bg-black/40">
               {/* Channel Header */}
@@ -1815,1290 +1762,69 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 2: MEMORY LEDGER */}
+        {/* VIEW 2: STRUCTURED MEMORY LEDGER */}
         {activeTab === 'ledger' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-black">
-            {/* Header / Subnav */}
-            <div className="p-4 border-b border-white/10 bg-neutral-950/80 flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Database className="w-4 h-4 text-white" />
-                  Structured Memory Ledger (MongoDB Atlas)
-                </h2>
-                <p className="text-[11px] text-neutral-400">Authoritative team directives embedded with 1024D Voyage dense vectors.</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* View Mode Toggle */}
-                <div className="bg-neutral-950 p-1 rounded-xl border border-white/15 flex text-xs">
-                  <button
-                    onClick={() => setLedgerView('cards')}
-                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                      ledgerView === 'cards' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" /> Cards
-                  </button>
-                  <button
-                    onClick={() => {
-                      setLedgerView('graph');
-                      loadGraphData();
-                    }}
-                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                      ledgerView === 'graph' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    <Network className="w-3.5 h-3.5" /> Knowledge Graph
-                  </button>
-                  <button
-                    onClick={() => {
-                      setLedgerView('hierarchy');
-                      loadHierarchyData();
-                    }}
-                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                      ledgerView === 'hierarchy' ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    <FolderTree className="w-3.5 h-3.5" /> Domain Hierarchy
-                  </button>
-                </div>
-
-                {ledgerView === 'cards' && (
-                  <div className="bg-neutral-950 p-1 rounded-xl border border-white/15 flex text-xs">
-                    {['all', 'active', 'superseded', 'expired'].map((filter) => (
-                      <button
-                        key={filter}
-                        onClick={() => setLedgerFilter(filter)}
-                        className={`px-3 py-1.5 rounded-lg font-medium capitalize transition ${
-                          ledgerFilter === filter ? 'bg-white text-black font-semibold shadow' : 'text-neutral-400 hover:text-white'
-                        }`}
-                      >
-                        {filter}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {ledgerView === 'graph' && (
-                  <button
-                    onClick={() => {
-                      if (memories.length >= 2) {
-                        setLinkSource(memories[0].id);
-                        setLinkTarget(memories[1].id);
-                      }
-                      setLinkModalOpen(true);
-                    }}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow"
-                  >
-                    <Link2 className="w-3.5 h-3.5" /> Link Lineage
-                  </button>
-                )}
-
-                {ledgerView === 'hierarchy' && (
-                  <button
-                    onClick={handleRecluster}
-                    disabled={isClustering}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow disabled:opacity-50"
-                  >
-                    <Boxes className="w-3.5 h-3.5" /> {isClustering ? 'Clustering...' : 'Re-cluster'}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => openAddModal()}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-white text-black hover:bg-neutral-200 flex items-center gap-1.5 transition shadow"
-                >
-                  <Plus className="w-4 h-4" /> Add Decision
-                </button>
-              </div>
-            </div>
-
-            {/* Content: Cards View vs Knowledge Graph View vs Domain Hierarchy */}
-            {ledgerView === 'cards' && (
-              <div className="flex-1 overflow-y-auto p-4">
-                {memories.length === 0 ? (
-                  <div className="text-center py-24 text-neutral-500 space-y-2">
-                    <Database className="w-8 h-8 mx-auto text-neutral-600" />
-                    <p className="text-xs font-semibold text-neutral-300">No memory documents found.</p>
-                    <p className="text-[11px] text-neutral-500">Post a decision in chat or click "+ Add Decision".</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-                    {memories.map((mem) => {
-                      const isPast = mem.valid_until && new Date() > new Date(mem.valid_until);
-                      return (
-                        <div
-                          key={mem.id}
-                          className={`memory-card bg-neutral-900/70 border rounded-2xl p-4.5 flex flex-col justify-between space-y-3 backdrop-blur-md transition ${
-                            mem.status === 'active'
-                              ? 'border-emerald-500/30 shadow-lg shadow-emerald-950/20'
-                              : mem.status === 'superseded'
-                              ? 'border-amber-500/30 shadow-lg shadow-amber-950/20'
-                              : 'border-white/10 opacity-70'
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-bold text-xs text-white">{mem.topic}</span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                  mem.status === 'active'
-                                    ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
-                                    : mem.status === 'superseded'
-                                    ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                                    : 'bg-white/10 text-neutral-400 border border-white/10'
-                                }`}
-                              >
-                                {mem.status}
-                              </span>
-                            </div>
-                            <p className="text-xs font-semibold text-neutral-100 mb-1.5 leading-relaxed">{mem.decision}</p>
-                            {mem.reason && (
-                              <div className="text-[11px] text-neutral-300 bg-black/60 p-2.5 rounded-xl border border-white/10">
-                                <span className="text-neutral-500 font-medium">Why:</span> {mem.reason}
-                              </div>
-                            )}
-
-                            {mem.superseded_by && (
-                              <div className="text-[10px] text-amber-400 font-medium flex items-center gap-1 mt-2 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">
-                                <ArrowRight className="w-3 h-3" /> Superseded by newer directive
-                              </div>
-                            )}
-
-                            {mem.valid_until && (
-                              <div
-                                className={`text-[10px] font-medium flex items-center gap-1 mt-1.5 ${
-                                  isPast ? 'text-rose-400' : 'text-neutral-400'
-                                }`}
-                              >
-                                <Clock className="w-3 h-3" /> {isPast ? 'Expired:' : 'Valid until:'}{' '}
-                                {new Date(mem.valid_until).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-neutral-400">
-                            <div className="flex items-center gap-2">
-                              <span>Owner: <strong className="text-neutral-200">{mem.owner}</strong></span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/80 border border-white/10 text-neutral-300 font-mono">
-                                {Math.round((mem.confidence || 0.95) * 100)}% conf
-                              </span>
-                              {(mem.reinforcementUp || 0) > 0 && (
-                                <span className="text-[10px] text-emerald-400 flex items-center gap-0.5 font-bold">
-                                  <ThumbsUp className="w-2.5 h-2.5" /> +{mem.reinforcementUp}
-                                </span>
-                              )}
-                              {(mem.reinforcementDown || 0) > 0 && (
-                                <span className="text-[10px] text-rose-400 flex items-center gap-0.5 font-bold">
-                                  <ThumbsDown className="w-2.5 h-2.5" /> -{mem.reinforcementDown}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <button
-                                onClick={() => handleSyncAdrToGitHub(mem)}
-                                disabled={isSyncingAdr}
-                                className="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-emerald-400 transition"
-                                title="Sync decision to GitHub docs/adr/ via automated Pull Request"
-                              >
-                                <GitPullRequest className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => openAddModal(mem)}
-                                className="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
-                                title="Edit decision"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteMemory(mem.id)}
-                                className="p-1.5 rounded hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition"
-                                title="Forget / Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* KNOWLEDGE GRAPH & GRAPHRAG MULTI-HOP LINEAGE EXPLORER */}
-            {ledgerView === 'graph' && (
-              <div className="flex-1 flex overflow-hidden">
-                {/* Visual Topology Canvas */}
-                <div className="flex-1 flex flex-col overflow-hidden relative bg-neutral-950">
-                  {/* Canvas Stats Bar */}
-                  <div className="px-4 py-2 border-b border-white/10 bg-neutral-900/30 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-white/10 border border-white/15 text-neutral-200 font-mono text-[10px]">
-                        Nodes: <strong>{graphData.summary?.totalNodes || graphData.nodes?.length || 0}</strong>
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[10px]">
-                        Edges: <strong>{graphData.summary?.totalEdges || graphData.edges?.length || 0}</strong>
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[10px]">
-                        Active: <strong>{graphData.summary?.activeCount || 0}</strong>
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-800 text-amber-300 font-mono text-[10px]">
-                        Superseded: <strong>{graphData.summary?.supersededCount || 0}</strong>
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-[11px] text-neutral-400">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Active
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Superseded
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> Expired
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* SVG Topology Viewport */}
-                  <div className="flex-1 relative overflow-auto flex items-center justify-center p-4">
-                    {(!graphData.nodes || graphData.nodes.length === 0) ? (
-                      <div className="text-center py-20 text-neutral-500 space-y-2">
-                        <Network className="w-10 h-10 mx-auto text-neutral-600 animate-pulse" />
-                        <p className="text-xs font-semibold text-neutral-400">No nodes in knowledge graph.</p>
-                        <p className="text-[11px] text-neutral-500">Seed demo data or post decisions to visualize relationship edges.</p>
-                      </div>
-                    ) : (
-                      <svg
-                        viewBox="0 0 860 540"
-                        className="w-full h-full max-w-4xl max-h-[580px] select-none"
-                      >
-                        {/* Background subtle grid */}
-                        <defs>
-                          <pattern id="graph-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                            <circle cx="1" cy="1" r="1" fill="#334155" opacity="0.3" />
-                          </pattern>
-                          <marker
-                            id="arrow-generic"
-                            viewBox="0 0 10 10"
-                            refX="10"
-                            refY="5"
-                            markerWidth="6"
-                            markerHeight="6"
-                            orient="auto-start-reverse"
-                          >
-                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#818cf8" />
-                          </marker>
-                          <marker
-                            id="arrow-supersedes"
-                            viewBox="0 0 10 10"
-                            refX="10"
-                            refY="5"
-                            markerWidth="6"
-                            markerHeight="6"
-                            orient="auto-start-reverse"
-                          >
-                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
-                          </marker>
-                          <marker
-                            id="arrow-caching"
-                            viewBox="0 0 10 10"
-                            refX="10"
-                            refY="5"
-                            markerWidth="6"
-                            markerHeight="6"
-                            orient="auto-start-reverse"
-                          >
-                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#c084fc" />
-                          </marker>
-                        </defs>
-
-                        <rect width="860" height="540" fill="url(#graph-grid)" />
-
-                        {/* Directed Edges */}
-                        {graphData.edges?.map((edge) => {
-                          const p1 = nodePositions[edge.source];
-                          const p2 = nodePositions[edge.target];
-                          if (!p1 || !p2) return null;
-
-                          const dx = p2.x - p1.x;
-                          const dy = p2.y - p1.y;
-                          const dist = Math.sqrt(dx * dx + dy * dy);
-                          if (dist === 0) return null;
-
-                          // Trim lines so they don't enter inside node rectangles
-                          const trim = 50;
-                          const x1 = p1.x + (dx / dist) * trim;
-                          const y1 = p1.y + (dy / dist) * trim;
-                          const x2 = p2.x - (dx / dist) * trim;
-                          const y2 = p2.y - (dy / dist) * trim;
-
-                          const mx = (x1 + x2) / 2;
-                          const my = (y1 + y2) / 2;
-
-                          const isSupersedes = edge.type === 'supersedes';
-                          const isCaching = edge.type === 'depends_on' || edge.label?.toLowerCase().includes('caching');
-
-                          const strokeColor = isSupersedes ? '#f59e0b' : isCaching ? '#a855f7' : '#818cf8';
-                          const markerId = isSupersedes ? 'url(#arrow-supersedes)' : isCaching ? 'url(#arrow-caching)' : 'url(#arrow-generic)';
-
-                          return (
-                            <g key={edge.id} className="transition-all duration-300">
-                              <line
-                                x1={x1}
-                                y1={y1}
-                                x2={x2}
-                                y2={y2}
-                                stroke={strokeColor}
-                                strokeWidth="2"
-                                strokeDasharray={isSupersedes ? '4 3' : 'none'}
-                                markerEnd={markerId}
-                                opacity="0.85"
-                              />
-                              {/* Edge Label Pill with dynamic width */}
-                              {(() => {
-                                const labelText = edge.label || edge.type;
-                                const pillWidth = Math.min(130, Math.max(76, labelText.length * 6.5 + 16));
-                                return (
-                                  <>
-                                    <rect
-                                      x={mx - pillWidth / 2}
-                                      y={my - 10}
-                                      width={pillWidth}
-                                      height="20"
-                                      rx="6"
-                                      fill="#090d16"
-                                      stroke={strokeColor}
-                                      strokeWidth="1.2"
-                                      opacity="0.95"
-                                    />
-                                    <text
-                                      x={mx}
-                                      y={my + 3.5}
-                                      textAnchor="middle"
-                                      fill="#cbd5e1"
-                                      fontSize="9"
-                                      fontWeight="bold"
-                                      className="pointer-events-none select-none font-sans"
-                                    >
-                                      {labelText.length > 18 ? `${labelText.slice(0, 18)}…` : labelText}
-                                    </text>
-                                  </>
-                                );
-                              })()}
-                            </g>
-                          );
-                        })}
-
-                        {/* Nodes */}
-                        {graphData.nodes?.map((node) => {
-                          const pos = nodePositions[node.id];
-                          if (!pos) return null;
-                          const isSelected = selectedGraphNode?.id === node.id;
-                          const isSuperseded = node.status === 'superseded';
-                          const isExpired = node.status === 'expired';
-
-                          const strokeColor = isSelected
-                            ? '#c084fc'
-                            : isSuperseded
-                            ? '#f59e0b'
-                            : isExpired
-                            ? '#f43f5e'
-                            : '#10b981';
-
-                          const displayText = node.statement || node.label || node.decision || '';
-
-                          return (
-                            <g
-                              key={node.id}
-                              onClick={() => handleSelectGraphNode(node)}
-                              className="cursor-pointer group transition-all"
-                            >
-                              {/* Glow on selection */}
-                              {isSelected && (
-                                <rect
-                                  x={pos.x - 84}
-                                  y={pos.y - 34}
-                                  width="168"
-                                  height="68"
-                                  rx="12"
-                                  fill="none"
-                                  stroke="#a855f7"
-                                  strokeWidth="6"
-                                  opacity="0.35"
-                                  className="animate-pulse"
-                                />
-                              )}
-
-                              {/* Node Rect */}
-                              <rect
-                                x={pos.x - 80}
-                                y={pos.y - 30}
-                                width="160"
-                                height="60"
-                                rx="10"
-                                fill="#0f172a"
-                                stroke={strokeColor}
-                                strokeWidth={isSelected ? '2.5' : '1.5'}
-                                className="transition-all duration-200 group-hover:fill-slate-800"
-                              />
-
-                              {/* Topic Badge */}
-                              <text
-                                x={pos.x - 70}
-                                y={pos.y - 12}
-                                fill="#94a3b8"
-                                fontSize="10"
-                                fontWeight="bold"
-                                className="font-sans"
-                              >
-                                {node.topic?.toUpperCase()}
-                              </text>
-
-                              {/* Status Dot */}
-                              <circle
-                                cx={pos.x + 65}
-                                cy={pos.y - 15}
-                                r="4"
-                                fill={strokeColor}
-                              />
-
-                              {/* Decision Statement preview */}
-                              <text
-                                x={pos.x - 70}
-                                y={pos.y + 6}
-                                fill="#f8fafc"
-                                fontSize="10"
-                                fontWeight="600"
-                                className="font-sans"
-                              >
-                                {displayText.length > 22 ? `${displayText.slice(0, 22)}...` : displayText}
-                              </text>
-
-                              {/* Owner */}
-                              <text
-                                x={pos.x - 70}
-                                y={pos.y + 20}
-                                fill="#64748b"
-                                fontSize="9"
-                                className="font-mono"
-                              >
-                                by {node.owner || 'team'}
-                              </text>
-                            </g>
-                          );
-                        })}
-                      </svg>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Panel: GraphRAG Multi-Hop Lineage Inspector */}
-                <div className="w-80 md:w-96 border-l border-white/10 bg-neutral-900/60 flex flex-col overflow-y-auto">
-                  <div className="p-3.5 border-b border-white/10 bg-black/70 flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
-                      <Share2 className="w-4 h-4 text-purple-400" />
-                      GraphRAG Multi-Hop Lineage
-                    </h3>
-                    <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-mono text-[9px] font-bold">
-                      $graphLookup
-                    </span>
-                  </div>
-
-                  {!selectedGraphNode ? (
-                    <div className="p-6 text-center text-neutral-500 space-y-2">
-                      <Network className="w-8 h-8 mx-auto text-neutral-600" />
-                      <p className="text-xs font-medium text-neutral-400">Select any node on the graph</p>
-                      <p className="text-[11px] text-neutral-500">Inspect multi-hop architectural dependencies, upstream/downstream relations, and RAG context.</p>
-                    </div>
-                  ) : (
-                    <div className="p-4 space-y-4 text-xs">
-                      {/* Active Node Detail Card */}
-                      <div className="bg-neutral-950 p-3.5 rounded-xl border border-white/10 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-white text-xs">{selectedGraphNode.topic}</span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                              selectedGraphNode.status === 'active'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                : selectedGraphNode.status === 'superseded'
-                                ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                : 'bg-neutral-800 text-neutral-400'
-                            }`}
-                          >
-                            {selectedGraphNode.status}
-                          </span>
-                        </div>
-                        <p className="text-white font-semibold text-xs leading-relaxed">
-                          {selectedGraphNode.statement || selectedGraphNode.label || selectedGraphNode.decision}
-                        </p>
-                        <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-neutral-400">
-                          <span>Owner: <strong className="text-neutral-300">{selectedGraphNode.owner}</strong></span>
-                          <span>Confidence: <strong>{Math.round((selectedGraphNode.confidence || 0.95) * 100)}%</strong></span>
-                        </div>
-                      </div>
-
-                      {/* Multi-Hop Traversed Neighbors */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
-                            <Layers className="w-3.5 h-3.5 text-purple-400" />
-                            Multi-Hop Lineage Path
-                          </span>
-                          <span className="text-[10px] text-neutral-400">
-                            {graphLineage?.neighbors?.length || 0} Connected
-                          </span>
-                        </div>
-
-                        {(!graphLineage?.neighbors || graphLineage.neighbors.length === 0) ? (
-                          <div className="bg-black/60 border border-white/10 rounded-xl p-3 text-neutral-500 text-[11px] text-center">
-                            Direct root memory. No multi-hop dependencies linked yet.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {graphLineage.neighbors.map((nbr, idx) => (
-                              <div
-                                key={idx}
-                                className="bg-neutral-950 p-2.5 rounded-xl border border-purple-900/40 hover:border-purple-700/60 transition space-y-1"
-                              >
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-bold border border-purple-800">
-                                    Hop {nbr.depth} • {nbr.direction === 'outgoing' ? '→ Out' : '← In'}
-                                  </span>
-                                  <span className="text-amber-400 font-medium capitalize">
-                                    {nbr.label || nbr.relationship || nbr.type}
-                                  </span>
-                                </div>
-                                <p className="text-neutral-200 text-[11px] font-medium leading-snug">
-                                  {nbr.node?.statement || nbr.node?.label || nbr.node?.decision}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* GraphRAG Prompt Context Box */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                            GraphRAG Prompt Grounding
-                          </span>
-                          <span className="text-[10px] text-emerald-400 font-mono">Zero Hallucination</span>
-                        </div>
-                        <div className="bg-neutral-950 p-3 rounded-xl border border-white/10 font-mono text-[10px] text-neutral-300 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
-                          {graphLineage?.graphContextText || 'Tracing relational graph context...'}
-                        </div>
-                        <p className="text-[10px] text-neutral-500">
-                          MongoDB Atlas traverses architectural edges up to 2 hops, grounding AI responses with complete relational context.
-                        </p>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="pt-2 border-t border-white/10 flex gap-2">
-                        <button
-                          onClick={() => {
-                            setLinkSource(selectedGraphNode.id);
-                            const other = memories.find(m => m.id !== selectedGraphNode.id);
-                            if (other) setLinkTarget(other.id);
-                            setLinkModalOpen(true);
-                          }}
-                          className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow"
-                        >
-                          <Link2 className="w-3.5 h-3.5" /> Link To Another Memory
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* DOMAIN HIERARCHY & MULTI-VECTOR RESOLUTION */}
-            {ledgerView === 'hierarchy' && (
-              <div className="flex-1 flex overflow-hidden">
-                {/* Left Pane: Macro Architectural Domain Clusters */}
-                <div className="flex-1 flex flex-col overflow-hidden bg-neutral-950 border-r border-white/10">
-                  {/* Summary Ribbon */}
-                  <div className="px-4 py-2.5 border-b border-white/10 bg-neutral-900/40 flex items-center justify-between text-xs flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[11px] font-bold">
-                        Domains: {hierarchyData.summary?.totalClusters || hierarchyData.clusters?.length || 0}
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-lg bg-white/10 border border-white/15 text-neutral-200 font-mono text-[11px] font-bold">
-                        Clustered Decisions: {hierarchyData.summary?.totalDecisions || 0}
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-lg bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1">
-                        <Award className="w-3 h-3 text-purple-400" /> Coherence: {hierarchyData.summary?.coherenceScore || 100}%
-                      </span>
-                    </div>
-
-                    <div className="text-[10px] text-neutral-400 flex items-center gap-1.5 font-mono">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      Voyage-4 1024D Centroid Index
-                    </div>
-                  </div>
-
-                  {/* Clusters List */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {(!hierarchyData.clusters || hierarchyData.clusters.length === 0) ? (
-                      <div className="text-center py-24 text-neutral-500 space-y-2">
-                        <FolderTree className="w-10 h-10 mx-auto text-neutral-600 animate-pulse" />
-                        <p className="text-xs font-semibold text-neutral-400">No domain clusters computed yet.</p>
-                        <p className="text-[11px] text-neutral-500">Click "Re-cluster" to synthesize hierarchical domains from memories.</p>
-                      </div>
-                    ) : (
-                      hierarchyData.clusters.map((cluster) => {
-                        const isSelected = selectedCluster?.id === cluster.id;
-                        return (
-                          <div
-                            key={cluster.id}
-                            onClick={() => setSelectedCluster(cluster)}
-                            className={`rounded-2xl border transition p-4 space-y-3 cursor-pointer ${
-                              isSelected
-                                ? 'bg-neutral-900 border-emerald-500/80 shadow-lg shadow-emerald-950/30'
-                                : 'bg-neutral-900/60 border-white/10 hover:border-white/15'
-                            }`}
-                          >
-                            {/* Domain Header */}
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-emerald-950 border border-emerald-800/80 text-emerald-400">
-                                  <FolderTree className="w-4 h-4" />
-                                </div>
-                                <div>
-                                  <h3 className="text-xs font-bold text-white flex items-center gap-2">
-                                    {cluster.name}
-                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 border border-white/15 text-neutral-300">
-                                      {cluster.topic}
-                                    </span>
-                                  </h3>
-                                  <p className="text-[10px] text-neutral-400">
-                                    {cluster.childCount} Child Directives • 1024D Macro Centroid Vector
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                  {cluster.activeCount} Active
-                                </span>
-                                {cluster.supersededCount > 0 && (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
-                                    {cluster.supersededCount} Superseded
-                                  </span>
-                                )}
-                                <span className="text-[10px] font-mono text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800">
-                                  {cluster.healthScore}% Coherent
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Macro Directive Synthesis */}
-                            <div className="bg-black/80 rounded-xl p-3 border border-emerald-900/40 text-xs">
-                              <div className="text-[10px] font-bold text-emerald-400 mb-1 flex items-center gap-1">
-                                <ShieldCheck className="w-3 h-3 text-emerald-400" /> Macro Domain Policy:
-                              </div>
-                              <p className="text-neutral-200 font-medium leading-relaxed italic">
-                                "{cluster.macroDirective}"
-                              </p>
-                            </div>
-
-                            {/* Child Micro-Decisions */}
-                            <div className="space-y-1.5 pt-1">
-                              <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
-                                <Workflow className="w-3 h-3 text-white" /> Resolved Child Micro-Decisions
-                              </div>
-                              <div className="grid grid-cols-1 gap-2">
-                                {cluster.children.map((child) => (
-                                  <div
-                                    key={child.id}
-                                    className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-                                      child.status === 'active'
-                                        ? 'bg-neutral-950 border-white/10 text-neutral-200'
-                                        : child.status === 'superseded'
-                                        ? 'bg-black/70 border-amber-900/40 text-neutral-400'
-                                        : 'bg-black/50 border-white/10 text-neutral-500'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0 pr-2">
-                                      <span className="text-white font-bold font-mono text-xs">↳</span>
-                                      <span className="truncate font-medium text-[11px]">{child.statement}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <span
-                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                          child.status === 'active'
-                                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                            : child.status === 'superseded'
-                                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                            : 'bg-neutral-800 text-neutral-400'
-                                        }`}
-                                      >
-                                        {child.status}
-                                      </span>
-                                      <span className="text-[9px] text-neutral-400 font-mono">
-                                        by {child.owner}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Pane: Interactive Hierarchical Multi-Vector Sandbox */}
-                <div className="w-80 md:w-96 bg-neutral-900/60 flex flex-col overflow-y-auto">
-                  <div className="p-3.5 border-b border-white/10 bg-black/70 flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
-                      <Boxes className="w-4 h-4 text-emerald-400" />
-                      Multi-Vector Domain Sandbox
-                    </h3>
-                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono text-[9px] font-bold">
-                      Hierarchical RAG
-                    </span>
-                  </div>
-
-                  <div className="p-4 space-y-4 text-xs">
-                    <p className="text-[11px] text-neutral-400 leading-relaxed">
-                      Test multi-tier retrieval: queries first match the 1024D centroid of the macro architectural domain, preventing cross-topic contamination before resolving micro-decisions.
-                    </p>
-
-                    <form onSubmit={handleHierarchySearch} className="space-y-2">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={hierarchySearchQuery}
-                          onChange={(e) => setHierarchySearchQuery(e.target.value)}
-                          placeholder="e.g. Can we use Redis for caching?"
-                          className="w-full bg-neutral-950 border border-white/15 rounded-xl px-3 py-2 pr-9 text-white text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
-                        <button
-                          type="submit"
-                          className="absolute right-1.5 top-1.5 p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
-                        >
-                          <Search className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Quick preset chips */}
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {[
-                          'Can we use Redis for caching?',
-                          'Are there any deployment freezes?',
-                          'What IDE theme is preferred?'
-                        ].map((prompt, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              setHierarchySearchQuery(prompt);
-                              setTimeout(() => {
-                                const fetchSearch = async () => {
-                                  try {
-                                    const res = await fetch(`/api/hierarchy/search?q=${encodeURIComponent(prompt)}&workspaceId=${activeTeam?.id || 'ws_core'}`);
-                                    const data = await res.json();
-                                    setHierarchySearchResult(data);
-                                  } catch (err) {}
-                                };
-                                fetchSearch();
-                              }, 50);
-                            }}
-                            className="text-[10px] px-2 py-1 rounded-lg bg-neutral-950 border border-white/10 text-neutral-300 hover:border-emerald-600 transition truncate max-w-full"
-                          >
-                            {prompt}
-                          </button>
-                        ))}
-                      </div>
-                    </form>
-
-                    {/* Results Display */}
-                    {hierarchySearchResult ? (
-                      <div className="space-y-3 pt-2">
-                        {/* Step 1: Matched Macro Domain */}
-                        <div className="bg-neutral-950 p-3 rounded-xl border border-emerald-800 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-emerald-400 text-xs">
-                              Level 1: Macro Domain Match
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[9px] font-bold border border-emerald-800">
-                              {Math.round((hierarchySearchResult.matchedCluster?.domainScore || 0) * 100)}% Sim
-                            </span>
-                          </div>
-                          <p className="text-white font-bold text-xs">
-                            {hierarchySearchResult.matchedCluster?.name}
-                          </p>
-                          <p className="text-neutral-300 text-[11px] italic">
-                            "{hierarchySearchResult.matchedCluster?.macroDirective}"
-                          </p>
-                        </div>
-
-                        {/* Step 2: Resolved Child Decisions */}
-                        <div className="space-y-1.5">
-                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
-                            <Workflow className="w-3.5 h-3.5 text-white" />
-                            Level 2: Resolved Child Decisions
-                          </span>
-                          <div className="space-y-1.5">
-                            {hierarchySearchResult.resolvedDecisions?.map((dec, idx) => (
-                              <div
-                                key={idx}
-                                className={`p-2 rounded-xl border text-[11px] ${
-                                  dec.status === 'active'
-                                    ? 'bg-neutral-950 border-emerald-900/60 text-neutral-200'
-                                    : 'bg-black/70 border-white/10 text-neutral-400 opacity-70'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between text-[9px] mb-1">
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded font-bold uppercase ${
-                                      dec.status === 'active'
-                                        ? 'bg-emerald-950 text-emerald-300'
-                                        : 'bg-neutral-800 text-neutral-400'
-                                    }`}
-                                  >
-                                    {dec.status}
-                                  </span>
-                                  <span className="font-mono text-neutral-200">
-                                    Score: {Math.round(dec.score * 100)}%
-                                  </span>
-                                </div>
-                                <p className="font-medium">{dec.statement}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Step 3: Hierarchical Prompt Grounding Context */}
-                        <div className="space-y-1">
-                          <span className="font-bold text-neutral-300 text-xs flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                            Hierarchical Prompt Context
-                          </span>
-                          <div className="bg-neutral-950 p-3 rounded-xl border border-white/10 font-mono text-[9px] text-neutral-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
-                            {hierarchySearchResult.hierarchicalContext}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-black/60 p-4 rounded-xl border border-white/10 text-center text-neutral-500 space-y-1">
-                        <Boxes className="w-6 h-6 mx-auto text-neutral-600" />
-                        <p className="text-[11px] font-medium text-neutral-400">No active search</p>
-                        <p className="text-[10px]">Type a query or click a quick prompt above to test hierarchical multi-vector resolution.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <LedgerView
+            memories={memories}
+            ledgerView={ledgerView}
+            setLedgerView={setLedgerView}
+            ledgerFilter={ledgerFilter}
+            setLedgerFilter={setLedgerFilter}
+            ledgerConfidenceMin={ledgerConfidenceMin}
+            setLedgerConfidenceMin={setLedgerConfidenceMin}
+            onOpenAddModal={() => openAddModal()}
+            onEditMemory={(mem) => openAddModal(mem)}
+            onDeleteMemory={handleDeleteMemory}
+            onSyncAdrToGitHub={handleSyncAdrToGitHub}
+            isSyncingAdr={isSyncingAdr}
+            onRecluster={handleRecluster}
+            isClustering={isClustering}
+            onOpenLinkModal={() => {
+              if (memories.length >= 2) {
+                setLinkSource(memories[0].id);
+                setLinkTarget(memories[1].id);
+              }
+              setLinkModalOpen(true);
+            }}
+            graphData={graphData}
+            selectedGraphNode={selectedGraphNode}
+            setSelectedGraphNode={setSelectedGraphNode}
+            graphLineage={graphLineage}
+            loadGraphLineage={loadGraphLineage}
+            hierarchyData={hierarchyData}
+            selectedCluster={selectedCluster}
+            setSelectedCluster={setSelectedCluster}
+            hierarchySearchQuery={hierarchySearchQuery}
+            setHierarchySearchQuery={setHierarchySearchQuery}
+            hierarchySearchResult={hierarchySearchResult}
+            handleHierarchySearch={handleHierarchySearch}
+          />
         )}
 
-        {/* VIEW 3: ACTIVE REINFORCEMENT & DPO TRAINING DATASET ENGINE */}
+        {/* VIEW 3: ACTIVE REINFORCEMENT & DPO TRAINING PIPELINE */}
         {activeTab === 'training' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-neutral-950">
-            {/* Header */}
-            <div className="p-4 border-b border-white/10 bg-neutral-900/40 flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-emerald-400" />
-                  Active Reinforcement & DPO Training Pipeline
-                </h2>
-                <p className="text-[11px] text-neutral-400">
-                  Continuous Memory Calibration: Feedback calibrates authoritative memory weights and exports training pairs for LLM fine-tuning.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleGenerateSynthetic}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-indigo-900 border border-white/15 text-neutral-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
-                  title="Generate synthetic training pairs from stored memories"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-white" />
-                  <span>Generate RLHF Sample</span>
-                </button>
-
-                <a
-                  href="/api/training/dpo-dataset.jsonl"
-                  download="synapsemem-dpo-dataset.jsonl"
-                  className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 transition shadow"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Export DPO (.jsonl)</span>
-                </a>
-
-                <a
-                  href="/api/training/voyage-pairs.jsonl"
-                  download="synapsemem-voyage-pairs.jsonl"
-                  className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-slate-700 border border-white/15 text-neutral-200 font-semibold text-xs flex items-center gap-1.5 transition shadow"
-                >
-                  <Download className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Export Voyage Pairs</span>
-                </a>
-              </div>
-            </div>
-
-            {/* Metrics Row */}
-            <div className="p-4 border-b border-white/10 grid grid-cols-2 md:grid-cols-4 gap-3 bg-neutral-900/20">
-              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
-                  <span>Adherence Rate</span>
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                </div>
-                <div className="text-xl font-black text-emerald-400">{trainingStats.adherenceRate}%</div>
-                <div className="text-[10px] text-neutral-500">Constraint satisfaction ratio</div>
-              </div>
-
-              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
-                  <span>DPO Pairs Ready</span>
-                  <Award className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <div className="text-xl font-black text-white">{trainingStats.dpoPairsCount}</div>
-                <div className="text-[10px] text-neutral-500">Chosen vs. Rejected tuples</div>
-              </div>
-
-              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
-                  <span>Calibrated Memories</span>
-                  <BrainCircuit className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div className="text-xl font-black text-neutral-200">{trainingStats.calibratedMemoriesCount}</div>
-                <div className="text-[10px] text-neutral-500">Weighted by human feedback</div>
-              </div>
-
-              <div className="bg-neutral-900/90 border border-white/10 p-3 rounded-xl space-y-1">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center justify-between">
-                  <span>Target Models</span>
-                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-                </div>
-                <div className="text-sm font-bold text-cyan-300 truncate">Llama-3 • Gemini • Voyage</div>
-                <div className="text-[10px] text-neutral-500">Direct fine-tuning format</div>
-              </div>
-            </div>
-
-            {/* Live Dataset Table */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
-                <span>Reinforced Training Dataset (Live Feed)</span>
-                <span className="text-[10px] text-neutral-500 font-mono">Format: Direct Preference Optimization (DPO)</span>
-              </div>
-
-              {feedbackList.length === 0 ? (
-                <div className="text-center py-20 text-neutral-500 space-y-3">
-                  <GraduationCap className="w-10 h-10 mx-auto text-neutral-600" />
-                  <p className="text-xs font-semibold text-neutral-300">No reinforcement data recorded yet.</p>
-                  <p className="text-[11px] text-neutral-500 max-w-md mx-auto">
-                    Click 👍 (Good) or 👎 (Bad) on any assistant answer in Chatbot to record reinforcement, or click "Generate RLHF Sample" above.
-                  </p>
-                </div>
-              ) : (
-                feedbackList.map((item, idx) => (
-                  <div key={item._id || idx} className="p-3.5 rounded-xl bg-neutral-900/80 border border-white/10 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
-                          item.rating === 1 
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' 
-                            : 'bg-rose-950 text-rose-300 border border-rose-800'
-                        }`}>
-                          {item.rating === 1 ? <ThumbsUp className="w-3 h-3" /> : <ThumbsDown className="w-3 h-3" />}
-                          {item.rating === 1 ? 'Adhered to Memory' : 'Constraint Violated'}
-                        </span>
-                        <span className="text-[10px] text-neutral-500 font-mono">
-                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-neutral-400 font-mono">
-                        Workspace: {item.workspaceId || 'ws_core'}
-                      </span>
-                    </div>
-
-                    <div className="text-xs font-semibold text-neutral-200">
-                      <span className="text-white font-bold mr-1.5">Prompt:</span>
-                      "{item.query}"
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-900/60 space-y-1">
-                        <div className="text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Chosen (Memory Grounded)
-                        </div>
-                        <p className="text-neutral-300 leading-relaxed">{item.chosenAnswer}</p>
-                      </div>
-
-                      <div className="p-2.5 rounded-lg bg-rose-950/20 border border-rose-900/50 space-y-1">
-                        <div className="text-[10px] font-bold text-rose-400 uppercase flex items-center gap-1">
-                          <X className="w-3 h-3" /> Rejected (Baseline Hallucination)
-                        </div>
-                        <p className="text-neutral-400 leading-relaxed italic">{item.rejectedAnswer}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          <TrainingView
+            trainingStats={trainingStats}
+            feedbackList={feedbackList}
+            onGenerateSynthetic={handleGenerateSynthetic}
+            onFeedback={handleFeedback}
+          />
         )}
 
-        {/* VIEW 4: MULTI-AGENT CONSENSUS & QUORUM MEMORY VALIDATION */}
+        {/* VIEW 4: MULTI-AGENT CONSENSUS & QUORUM */}
         {activeTab === 'consensus' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-neutral-950">
-            {/* Header */}
-            <div className="p-4 border-b border-white/10 bg-neutral-900/40 flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Vote className="w-4 h-4 text-purple-400" />
-                  Multi-Agent Consensus & Quorum Memory Validation
-                </h2>
-                <p className="text-[11px] text-neutral-400">
-                  Autonomous Multi-Agent Governance: High-impact memory mutations require ≥67% quorum consensus across specialized agent personas before writing to MongoDB Atlas.
-                </p>
-              </div>
-
-              {/* Stats Badges */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2.5 py-1 rounded-xl bg-purple-950/80 border border-purple-800 text-purple-300 font-mono text-[11px] font-bold">
-                  Quorum: {consensusStats.quorumThreshold || '67% (2 of 3)'}
-                </span>
-                <span className="px-2.5 py-1 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-mono text-[11px] font-bold">
-                  Ratified: {consensusStats.ratifiedCount || 0}
-                </span>
-                <span className="px-2.5 py-1 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 font-mono text-[11px] font-bold">
-                  Rejected: {consensusStats.rejectedCount || 0}
-                </span>
-                <span className="px-2.5 py-1 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-300 font-mono text-[11px] font-bold flex items-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Vetoes: {consensusStats.vetoCount || 0}
-                </span>
-              </div>
-            </div>
-
-            {/* Main Content Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Interactive Simulation Sandbox */}
-              <div className="bg-neutral-900/70 border border-purple-900/40 rounded-2xl p-4 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-purple-950 border border-purple-800 text-purple-300">
-                      <Scale className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-white">Simulate Multi-Agent Quorum Evaluation</h3>
-                      <p className="text-[10px] text-neutral-400">Propose any decision to trigger live voting from Atlas Architect, Sentinel Guard, and Pipeline Marshal.</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-950 border border-white/10 text-neutral-300">
-                    3 Specialized Evaluator Personas
-                  </span>
-                </div>
-
-                <form onSubmit={(e) => handleEvaluateConsensus(e)} className="space-y-2.5">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={consensusProposalText}
-                      onChange={(e) => setConsensusProposalText(e.target.value)}
-                      placeholder="e.g. Deploy immediately to production now, bypass freeze window."
-                      className="flex-1 bg-neutral-950 border border-white/15 rounded-xl px-3.5 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={evaluatingConsensus}
-                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center gap-1.5 transition shadow disabled:opacity-50 shrink-0"
-                    >
-                      <Vote className="w-4 h-4" />
-                      {evaluatingConsensus ? 'Evaluating Quorum...' : 'Evaluate Quorum'}
-                    </button>
-                  </div>
-
-                  {/* Preset quick test chips */}
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
-                    {[
-                      { label: 'Redis Cache Approval (Valid)', text: 'We have now approved Redis for caching, but MongoDB Atlas must remain our primary database.' },
-                      { label: 'Bypass Freeze Rule (Veto)', text: 'Deploy hotfix directly to production cluster immediately, bypass freeze window.' },
-                      { label: 'Rogue Database Migration (Rejected)', text: 'Migrate entire user database to DynamoDB and drop MongoDB Atlas.' },
-                      { label: 'Export Plaintext Keys (Veto)', text: 'Disable authentication and export bearer tokens to public endpoint.' }
-                    ].map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setConsensusProposalText(preset.text);
-                          handleEvaluateConsensus(null, preset.text);
-                        }}
-                        className="text-[10px] px-2.5 py-1 rounded-lg bg-neutral-950 border border-white/10 hover:border-purple-600 text-neutral-300 transition"
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </form>
-
-                {/* Active Evaluated Proposal Live Ballots */}
-                {activeEvaluatedProposal && (
-                  <div className="pt-2 border-t border-white/10 space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="text-xs font-semibold text-neutral-200">
-                        <span className="text-purple-400 font-bold mr-1.5">Evaluated Directive:</span>
-                        "{activeEvaluatedProposal.statement}"
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase border flex items-center gap-1 ${
-                          activeEvaluatedProposal.quorumReached
-                            ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                            : 'bg-rose-950 text-rose-300 border-rose-800'
-                        }`}>
-                          {activeEvaluatedProposal.quorumReached ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
-                          {activeEvaluatedProposal.quorumReached ? 'RATIFIED (Quorum Reached)' : 'BLOCKED / VETOED'}
-                        </span>
-                        <span className="text-[10px] font-mono text-neutral-400">
-                          {activeEvaluatedProposal.approvalCount} of {activeEvaluatedProposal.totalVoters} Votes ({Math.round(activeEvaluatedProposal.approvalRate * 100)}%)
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 3 Agent Ballot Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {activeEvaluatedProposal.votes?.map((vote, vIdx) => {
-                        const isApprove = vote.vote === 'approve';
-                        const isVeto = vote.veto === true;
-                        return (
-                          <div
-                            key={vIdx}
-                            className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 ${
-                              isVeto
-                                ? 'bg-rose-950/30 border-rose-800 shadow-md shadow-rose-950/20'
-                                : isApprove
-                                ? 'bg-black/80 border-emerald-900/60'
-                                : 'bg-black/80 border-amber-900/50'
-                            }`}
-                          >
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-xs text-white flex items-center gap-1.5">
-                                  <span>{vote.agentId === 'agent_architect' ? '🏛️' : vote.agentId === 'agent_security' ? '🔒' : '🚀'}</span>
-                                  {vote.agentName}
-                                </span>
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                    isVeto
-                                      ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                                      : isApprove
-                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                      : 'bg-amber-950 text-amber-300 border border-amber-800'
-                                  }`}
-                                >
-                                  {isVeto ? 'CRITICAL VETO' : vote.vote}
-                                </span>
-                              </div>
-                              <span className="text-[9px] text-neutral-400 font-mono block mb-1.5">{vote.role}</span>
-                              <p className="text-[11px] text-neutral-300 leading-relaxed italic">
-                                "{vote.rationale}"
-                              </p>
-                            </div>
-                            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
-                              <span>Confidence: {Math.round(vote.confidence * 100)}%</span>
-                              <span>Signed Ballot</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Proposals Registry Log */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Vote className="w-4 h-4 text-purple-400" />
-                    Consensus Proposal Registry
-                  </div>
-
-                  {/* Filter chips */}
-                  <div className="flex bg-neutral-950 p-1 rounded-xl border border-white/10 text-xs">
-                    {['all', 'ratified', 'rejected'].map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setConsensusFilter(f)}
-                        className={`px-3 py-1 rounded-lg font-medium capitalize transition ${
-                          consensusFilter === f ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-neutral-200'
-                        }`}
-                      >
-                        {f === 'rejected' ? 'Rejected / Vetoed' : f}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Proposals List */}
-                <div className="space-y-2.5">
-                  {consensusHistory
-                    .filter((p) => {
-                      if (consensusFilter === 'all') return true;
-                      return p.status === consensusFilter;
-                    })
-                    .map((item, idx) => (
-                      <div
-                        key={item.id || idx}
-                        onClick={() => setActiveEvaluatedProposal(item)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition space-y-2 ${
-                          item.status === 'ratified'
-                            ? 'bg-neutral-900/70 border-white/10 hover:border-emerald-800'
-                            : 'bg-neutral-900/50 border-rose-950/80 hover:border-rose-800'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
-                                item.status === 'ratified'
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                  : 'bg-rose-950 text-rose-300 border border-rose-800'
-                              }`}
-                            >
-                              {item.status === 'ratified' ? <CheckCircle2 className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
-                              {item.status === 'ratified' ? 'Ratified into Memory' : 'Vetoed / Blocked'}
-                            </span>
-                            <span className="text-[10px] font-mono text-neutral-400">
-                              Quorum: {item.approvalCount || (item.votes?.filter(v => v.vote === 'approve').length || 0)}/{item.totalVoters || 3} Votes
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-mono text-neutral-500">
-                            {new Date(item.evaluatedAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-
-                        <p className="text-xs font-semibold text-white">
-                          {item.statement}
-                        </p>
-
-                        {item.dissentingViews?.length > 0 && (
-                          <div className="p-2 rounded-lg bg-rose-950/20 border border-rose-900/30 text-[10px] text-rose-300 space-y-0.5">
-                            <span className="font-bold uppercase tracking-wider block text-rose-400">Dissenting Views / Veto:</span>
-                            {item.dissentingViews.map((dv, dIdx) => (
-                              <div key={dIdx}>• {dv}</div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ConsensusView
+            consensusStats={consensusStats}
+            consensusProposalText={consensusProposalText}
+            setConsensusProposalText={setConsensusProposalText}
+            evaluatingConsensus={evaluatingConsensus}
+            handleEvaluateConsensus={handleEvaluateConsensus}
+            activeEvaluatedProposal={activeEvaluatedProposal}
+            consensusHistory={consensusHistory}
+            consensusQuorumThreshold={consensusQuorumThreshold}
+            setConsensusQuorumThreshold={setConsensusQuorumThreshold}
+          />
         )}
-
         {/* SIDEBAR: INSPECT PANEL */}
         {inspectOpen && (
           <aside className="w-96 border-l border-white/10 bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-2xl">
@@ -3179,65 +1905,109 @@ export default function App() {
         )}
       </div>
 
-      {/* MODAL: TIME MACHINE SIMULATOR */}
+      {/* MODAL: TIME MACHINE SIMULATOR WITH TEMPORAL SCRUBBER SLIDER */}
       {timeMachineOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-neutral-900 border border-white/15 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-amber-500/30 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl text-xs">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <History className="w-4 h-4 text-amber-400" /> Time Machine Simulator
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-400" /> Temporal Time Machine & Expiry Scrubber
               </h3>
               <button onClick={() => setTimeMachineOpen(false)} className="text-neutral-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-neutral-400 text-xs">Advance application time to verify how temporary assumptions automatically expire.</p>
+            <p className="text-neutral-400 text-xs">
+              Scrub application time to dynamically verify how temporary assumptions (e.g., Sprint Deployment Freeze) automatically expire from live grounding without prompt edits.
+            </p>
 
-            <div className="p-3 bg-neutral-950 rounded-xl border border-white/10 space-y-2 text-[11px]">
+            {/* Live Scrubber Readout */}
+            <div className="p-3.5 bg-neutral-950 rounded-xl border border-white/10 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-neutral-400">Current App Date:</span>
-                <span className="font-bold text-amber-300 font-mono">
-                  {new Date(simulatedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                <span className="text-neutral-400">Target Simulated Date:</span>
+                <span className="font-bold text-amber-300 font-mono text-sm">
+                  {(() => {
+                    const d = new Date('2026-10-30T10:00:00.000Z');
+                    d.setDate(d.getDate() + timeScrubberDays);
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  })()}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-400">Deployment Freeze:</span>
-                <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                  new Date(simulatedTime) > new Date('2026-11-05T18:00:00.000Z')
-                    ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                    : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+
+              {/* Scrubber Range Slider */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-[10px] text-neutral-400 font-mono">
+                  <span>Day 0 (Oct 30)</span>
+                  <span className="text-amber-400 font-bold">+{timeScrubberDays} Days</span>
+                  <span>Day 14 (Nov 13)</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="14"
+                  step="1"
+                  value={timeScrubberDays}
+                  onChange={(e) => setTimeScrubberDays(Number(e.target.value))}
+                  className="obsidian-slider"
+                  title="Drag slider to simulate passing days"
+                />
+              </div>
+
+              {/* Status Alert */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-neutral-400">Deployment Freeze Status:</span>
+                <span className={`font-bold px-2 py-0.5 rounded text-[10px] border ${
+                  timeScrubberDays >= 7
+                    ? 'bg-rose-950 text-rose-300 border-rose-800'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-800'
                 }`}>
-                  {new Date(simulatedTime) > new Date('2026-11-05T18:00:00.000Z') ? 'EXPIRED (Post-Freeze)' : 'ACTIVE (Freeze In Effect)'}
+                  {timeScrubberDays >= 7 ? 'EXPIRED (Post-Freeze Nov 6+)' : 'ACTIVE (Freeze In Effect)'}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2 text-xs">
+            {/* Quick Preset Buttons */}
+            <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => handleTimeTravel(0)}
-                className="w-full py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-slate-700 text-neutral-200 text-left flex items-center justify-between font-medium"
+                type="button"
+                onClick={() => setTimeScrubberDays(0)}
+                className={`py-2 rounded-xl text-center font-semibold transition text-[11px] border ${
+                  timeScrubberDays === 0 ? 'bg-white text-black border-white' : 'bg-neutral-800 text-neutral-300 border-white/10 hover:text-white'
+                }`}
               >
-                <div>
-                  <div className="font-semibold">Reset to Oct 30, 2026</div>
-                  <div className="text-[10px] text-neutral-400">Active sprint period (freeze active)</div>
-                </div>
-                <span className="text-white font-bold">Reset</span>
+                Day 0 (Active)
               </button>
               <button
-                onClick={() => handleTimeTravel(7)}
-                className="w-full py-2.5 px-3 rounded-xl bg-white/10 hover:bg-indigo-900 border border-white/15 text-neutral-200 text-left flex items-center justify-between font-bold"
+                type="button"
+                onClick={() => setTimeScrubberDays(7)}
+                className={`py-2 rounded-xl text-center font-semibold transition text-[11px] border ${
+                  timeScrubberDays === 7 ? 'bg-amber-400 text-black border-amber-400' : 'bg-neutral-800 text-neutral-300 border-white/10 hover:text-white'
+                }`}
               >
-                <div>
-                  <div className="font-semibold">Fast-Forward +7 Days (Nov 6, 2026)</div>
-                  <div className="text-[10px] text-amber-400">Post-freeze period (freeze expired)</div>
-                </div>
-                <span className="text-amber-400">+7d</span>
+                Day +7 (Expired)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeScrubberDays(14)}
+                className={`py-2 rounded-xl text-center font-semibold transition text-[11px] border ${
+                  timeScrubberDays === 14 ? 'bg-white text-black border-white' : 'bg-neutral-800 text-neutral-300 border-white/10 hover:text-white'
+                }`}
+              >
+                Day +14
               </button>
             </div>
+
+            {/* Apply Action */}
+            <button
+              onClick={() => handleTimeTravel(timeScrubberDays)}
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center justify-center gap-1.5 shadow transition"
+            >
+              <History className="w-4 h-4 text-black" />
+              <span>Apply Target Time to Atlas Engine (+{timeScrubberDays}d)</span>
+            </button>
           </div>
         </div>
       )}
-
       {/* MODAL: ADD / EDIT MEMORY */}
       {addModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
