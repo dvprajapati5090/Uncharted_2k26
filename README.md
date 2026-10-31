@@ -253,3 +253,64 @@ Agent Baseline (Without Memory): For general tasks, standard architectural patte
 2. Switch to **Alex Rivera** in the header. Ask for Sarah's private preference.
 3. Observe: Server-side isolation blocks recall. User A's private knowledge is never leaked.
 4. Click **Delete (Trash)** on any memory in the Ledger → document and vector are permanently purged from MongoDB.
+
+
+---
+
+## 🛡️ SynapseMem CI / PR Architecture Compliance Linter
+
+> **Bridges the gap between AI agent memory and real-world software engineering pipelines.**  
+> Automatically validates Pull Requests, RFCs, and commit messages against authoritative MongoDB Atlas architecture memory before code merges.
+
+### 🌟 Why This Matters
+AI agents in chat are useful, but architectural violations usually happen in **Pull Requests**. Without guardrails, a developer might introduce an unapproved database, bypass a deployment freeze, or leak API keys into code reviews. The **PR Linter** runs in terminal or inside **GitHub Actions CI**, acting as an automated architectural gatekeeper.
+
+### 🔍 4-Stage Verification Pipeline
+
+```
+Pull Request / Commit Message / RFC
+                 │
+                 ▼
+ [Stage 1: Zero-Trust Privacy Gate] ──────► Fails on exposed API keys, private keys, or tokens
+                 │
+                 ▼
+ [Stage 2: Architecture Contradiction] ──► Fails if PR contradicts active MongoDB decisions (e.g., Redis ban)
+                 │
+                 ▼
+ [Stage 3: Release Governance Window] ───► Fails if PR deploys to prod during an active freeze window
+                 │
+                 ▼
+ [Stage 4: Multi-Agent Quorum] ──────────► Submits proposal to Architect, Security Guard & Pipeline Marshal
+                 │
+                 ▼
+      [Pass: Exit 0 / Block: Exit 1] ────► Automatically posts Markdown Audit Table to GitHub PR
+```
+
+### 🧪 How to Test Locally & In Real Projects
+
+#### 1. Run the Automated 4-Scenario Test Suite
+Evaluates compliant changes, direct contradictions, freeze violations, and credential leaks in one command:
+```bash
+node scripts/pr-linter.js --demo
+```
+
+#### 2. Test Any Custom PR Description or Commit Message
+```bash
+# Example A: Test an unauthorized Redis proposal (Should FAIL)
+node scripts/pr-linter.js --text "Introduce Redis with BullMQ for notification job queues without approval."
+
+# Example B: Test a compliant MongoDB Change Stream proposal (Should PASS)
+node scripts/pr-linter.js --text "Standardize on MongoDB Atlas change streams for background notification workers."
+```
+
+#### 3. Test with a Markdown PR File
+```bash
+# Test against sample PR file and generate GitHub PR Markdown report
+node scripts/pr-linter.js --file scripts/sample-pr.md --markdown
+```
+
+#### 4. GitHub Actions CI Integration
+The repository includes a ready-to-run GitHub Actions workflow located at:
+[`.github/workflows/synapse-pr-linter.yml`](.github/workflows/synapse-pr-linter.yml)
+
+It triggers on `pull_request` events, runs the audit, generates a formatted compliance table, and exits with code `1` to block merging if any architectural policy or security rule is violated.
