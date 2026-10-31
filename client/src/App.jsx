@@ -48,7 +48,9 @@ import {
   FileText,
   Radio,
   Activity,
-  AlertTriangle
+  AlertTriangle,
+  GitPullRequest,
+  GitBranch
 } from 'lucide-react';
 
 function formatMessageContent(text) {
@@ -234,6 +236,12 @@ export default function App() {
   const [realtimeStats, setRealtimeStats] = useState({ totalEvents: 0, connectedClients: 0 });
   const [conflictWarning, setConflictWarning] = useState(null);
   const [isExportingDossier, setIsExportingDossier] = useState(false);
+  const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [githubRepoUrl, setGithubRepoUrl] = useState('https://github.com/acme/backend');
+  const [githubPatToken, setGithubPatToken] = useState('');
+  const [isOnboardingGithub, setIsOnboardingGithub] = useState(false);
+  const [githubOnboardResult, setGithubOnboardResult] = useState(null);
+  const [isSyncingAdr, setIsSyncingAdr] = useState(false);
 
   const channelQuickPrompts = {
     'architecture': [
@@ -245,6 +253,7 @@ export default function App() {
       'No production deployments until November 5, 2026.'
     ],
     'ask-assistant': [
+      'Connect to my GitHub repository: https://github.com/acme/backend',
       'Design a background job system for scheduled notifications.',
       'Can we use Redis for caching?',
       'Are there any active deployment freeze rules?',
@@ -415,6 +424,61 @@ export default function App() {
       showToast('Export failed', 'error');
     } finally {
       setIsExportingDossier(false);
+    }
+  };
+
+  const handleConnectGithub = async (e) => {
+    if (e) e.preventDefault();
+    if (!githubRepoUrl.trim()) return;
+
+    setIsOnboardingGithub(true);
+    setGithubOnboardResult(null);
+
+    try {
+      const res = await fetch('/api/github/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoUrl: githubRepoUrl.trim(),
+          githubToken: githubPatToken.trim() || undefined,
+          workspaceId: activeTeam?.id || 'ws_core'
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to onboard repository');
+
+      setGithubOnboardResult(data);
+      loadMemories();
+      showToast(`Autonomous setup complete! Pull request opened on ${data.repo}.`, 'success');
+    } catch (err) {
+      showToast(`GitHub Onboarding error: ${err.message}`, 'error');
+    } finally {
+      setIsOnboardingGithub(false);
+    }
+  };
+
+  const handleSyncAdrToGitHub = async (mem) => {
+    setIsSyncingAdr(true);
+    try {
+      const res = await fetch('/api/github/sync-adr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memoryId: mem.id || mem._id,
+          repoUrl: githubRepoUrl || 'https://github.com/acme/backend',
+          githubToken: githubPatToken.trim() || undefined
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to sync ADR to GitHub');
+
+      showToast(`Opened PR on GitHub: ${data.adrTitle}!`, 'success');
+    } catch (err) {
+      showToast(`ADR Sync error: ${err.message}`, 'error');
+    } finally {
+      setIsSyncingAdr(false);
     }
   };
 
@@ -1222,6 +1286,16 @@ export default function App() {
             <span>Guided Demo</span>
           </button>
 
+          {/* Autonomous GitHub Onboard Pill */}
+          <button
+            onClick={() => setGithubModalOpen(true)}
+            className="tool-dock-btn border-white/20 hover:border-white/40 bg-white/5 hover:bg-white/10 text-white"
+            title="Autonomous GitHub Repo Onboarding & PR-Linter Installation"
+          >
+            <GitPullRequest className="w-3.5 h-3.5 text-white" />
+            <span>GitHub Onboard</span>
+          </button>
+
           {/* Operations Menu Dropdown - Consolidates Benchmark, ADR, Time Machine, Inspector, Reset */}
           <div className="relative">
             <button
@@ -1241,6 +1315,17 @@ export default function App() {
                   onClick={() => setOperationsMenuOpen(false)}
                 />
                 <div className="absolute right-0 mt-2 w-64 rounded-xl obsidian-dropdown p-1.5 z-50 text-xs shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    onClick={() => { setOperationsMenuOpen(false); setGithubModalOpen(true); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-2.5 transition"
+                  >
+                    <GitPullRequest className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-white">GitHub Self-Onboarding</div>
+                      <div className="text-[10px] text-neutral-400">Install PR-Linter & Reverse Ingest</div>
+                    </div>
+                  </button>
+
                   <button
                     onClick={() => { setOperationsMenuOpen(false); setBenchmarkModalOpen(true); if (!benchmarkData) loadBenchmarkData(); }}
                     className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-2.5 transition"
@@ -1888,6 +1973,14 @@ export default function App() {
                               )}
                             </div>
                             <div className="flex items-center space-x-1">
+                              <button
+                                onClick={() => handleSyncAdrToGitHub(mem)}
+                                disabled={isSyncingAdr}
+                                className="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-emerald-400 transition"
+                                title="Sync decision to GitHub docs/adr/ via automated Pull Request"
+                              >
+                                <GitPullRequest className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={() => openAddModal(mem)}
                                 className="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
@@ -3754,6 +3847,219 @@ export default function App() {
             <div className="p-3 border-t border-white/10 bg-neutral-950 text-center text-[10px] text-neutral-500">
               Atlas collection: <code className="text-neutral-400">synapsemem.memories</code>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: AUTONOMOUS GITHUB SELF-ONBOARDING */}
+      {githubModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-white/15 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <GitPullRequest className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Autonomous GitHub Self-Onboarding
+                  </h3>
+                  <p className="text-[11px] text-neutral-400">
+                    Installs SynapseMem CI Guardian into any repo & reverse-ingests initial architecture memories
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setGithubModalOpen(false)}
+                className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Architecture Explainer Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              <div className="p-3 rounded-xl bg-neutral-900/60 border border-white/10 space-y-1">
+                <div className="font-semibold text-emerald-400 flex items-center gap-1.5 text-[11px]">
+                  <span>1. Reverse Ingestion</span>
+                </div>
+                <p className="text-[10px] text-neutral-400 leading-relaxed">
+                  Crawls <code className="text-neutral-300">package.json</code>, <code className="text-neutral-300">docs/adr/</code>, & <code className="text-neutral-300">.env.example</code> into MongoDB Atlas 1024D vectors.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-neutral-900/60 border border-white/10 space-y-1">
+                <div className="font-semibold text-purple-400 flex items-center gap-1.5 text-[11px]">
+                  <span>2. Autonomous PR</span>
+                </div>
+                <p className="text-[10px] text-neutral-400 leading-relaxed">
+                  Creates branch <code className="text-neutral-300">synapse/install-architecture-guard</code> and commits <code className="text-neutral-300">synapse-pr-linter.yml</code>.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-neutral-900/60 border border-white/10 space-y-1">
+                <div className="font-semibold text-blue-400 flex items-center gap-1.5 text-[11px]">
+                  <span>3. Living ADR Sync</span>
+                </div>
+                <p className="text-[10px] text-neutral-400 leading-relaxed">
+                  New decisions made in chat can be instantly committed back as numbered ADR PRs to the codebase.
+                </p>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleConnectGithub} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-neutral-300 font-semibold text-[11px]">
+                  GitHub Repository URL or <code className="text-neutral-400 font-mono">owner/repo</code>
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      required
+                      value={githubRepoUrl}
+                      onChange={(e) => setGithubRepoUrl(e.target.value)}
+                      placeholder="e.g. https://github.com/acme/backend or acme/backend"
+                      className="w-full bg-neutral-900 border border-white/15 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGithubRepoUrl('https://github.com/acme/backend')}
+                    className="px-2.5 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white font-mono text-[10px] transition shrink-0"
+                  >
+                    Demo URL
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-neutral-300 font-semibold text-[11px]">
+                    GitHub Personal Access Token (PAT) <span className="text-neutral-500 font-normal">(Optional)</span>
+                  </label>
+                  <span className="text-[10px] text-neutral-400">Leave empty for instant simulated agent demo</span>
+                </div>
+                <input
+                  type="password"
+                  value={githubPatToken}
+                  onChange={(e) => setGithubPatToken(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx (Requires 'repo' scope for live commits)"
+                  className="w-full bg-neutral-900 border border-white/15 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Zero manual config: Agent writes workflows & creates PR</span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isOnboardingGithub}
+                  className="px-5 py-2.5 rounded-xl bg-white text-black font-semibold hover:bg-neutral-200 transition shadow-lg shadow-white/10 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isOnboardingGithub ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <span>Onboarding & Creating PR...</span>
+                    </>
+                  ) : (
+                    <>
+                      <GitPullRequest className="w-4 h-4 text-black" />
+                      <span>Connect & Install Guardian PR</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Results Output */}
+            {githubOnboardResult && (
+              <div className="p-4 rounded-xl bg-neutral-900/90 border border-emerald-500/40 space-y-3.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span className="font-bold text-white text-sm">
+                      Pull Request Created Successfully
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/30 text-emerald-300 font-mono text-[10px] font-bold">
+                    PR #{githubOnboardResult.pullRequest?.number || 15} OPENED
+                  </span>
+                </div>
+
+                <div className="p-3 bg-black/60 rounded-lg border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-neutral-400">Target Repository:</span>
+                    <span className="font-mono text-white font-bold">{githubOnboardResult.repo}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-neutral-400">Guardian Branch:</span>
+                    <span className="font-mono text-emerald-400 font-bold">{githubOnboardResult.branch}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-neutral-400">Workflow Installed:</span>
+                    <span className="font-mono text-neutral-200">.github/workflows/synapse-pr-linter.yml</span>
+                  </div>
+                </div>
+
+                {/* Reverse Ingested Memories summary */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-neutral-300 flex items-center gap-1.5">
+                      <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+                      Reverse-Ingested Memories into Atlas:
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800 text-purple-300 font-mono font-bold">
+                      {githubOnboardResult.ingestedCount || 0} Records Added
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {githubOnboardResult.ingestedMemories?.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2 rounded-lg bg-black/40 border border-white/10 flex items-center justify-between text-[11px]"
+                      >
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-white/10 text-white mr-1.5">
+                            {item.topic}
+                          </span>
+                          <span className="text-neutral-200">{item.directive}</span>
+                        </div>
+                        <span className="text-[10px] text-neutral-400 font-mono shrink-0">
+                          {item.confidence ? `${Math.round(item.confidence * 100)}% conf` : '100%'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between gap-2">
+                  <a
+                    href={githubOnboardResult.pullRequest?.html_url || `https://github.com/${githubOnboardResult.repo}/pull/${githubOnboardResult.pullRequest?.number || 15}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1.5 transition"
+                  >
+                    <GitPullRequest className="w-3.5 h-3.5" />
+                    <span>View Pull Request on GitHub</span>
+                  </a>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText('node scripts/pr-linter.js');
+                      showToast('Copied local PR-Linter audit command to clipboard!', 'info');
+                    }}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-neutral-200 text-[11px] font-mono transition"
+                  >
+                    Copy: node scripts/pr-linter.js
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

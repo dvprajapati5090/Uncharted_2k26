@@ -322,9 +322,47 @@ The SynapseMem 2.0 user interface is built on the **Vesper.ai Obsidian Design Sy
 - **Typography**: Inter Variable Roman paired with Instrument Serif Italic accents.
 - **Dual-Mode Contrast Panel**: Displays memory-grounded answers alongside baseline "without memory" responses to tangibly showcase behavioral adaptation.
 
+### 6.13 Feature 17: Autonomous GitHub Self-Onboarding, Reverse Memory Ingestion & Living Bidirectional ADR Sync
+
+#### The Problem:
+Most AI coding assistants and memory tools live completely detached from production engineering repositories. They force developers to manually configure settings, paste snippets into files, and manually keep architecture docs synchronized.
+
+#### The Autonomous Solution:
+SynapseMem 2.0 implements **Self-Onboarding Agentic Memory**:
+1. **Zero-Click Installation via GitHub REST API (Octokit):**
+   - User states in natural chat: `"Connect to my GitHub repository: https://github.com/acme/backend"` or clicks **"GitHub Onboard"** in the top navigation dock.
+   - The agent calls the GitHub API to check repository validity and branch permissions.
+   - It autonomously creates a branch: `synapse/install-architecture-guard`.
+   - It writes `.github/workflows/synapse-pr-linter.yml` and `scripts/pr-linter.js` directly into the repository.
+   - It opens an authoritative Pull Request: `"🧠 Install SynapseMem Architectural Memory Guardian"`.
+2. **Reverse Memory Ingestion (Codebase ➔ MongoDB Atlas):**
+   - The agent never starts empty. Upon connection, it scans the repository's foundational configuration:
+     - `package.json` ➔ Detects frameworks, databases, and dependencies (e.g. Express 4.19, MongoDB Driver, React 19).
+     - `docs/adr/` ➔ Crawls existing Architecture Decision Records and indexes historical decisions directly into MongoDB Atlas with 1024D embeddings.
+     - `.env.example` ➔ Identifies approved infrastructure, cloud components (Stripe, Mongo, SendGrid, Redis).
+     - `README.md` ➔ Extracts high-level engineering directives.
+3. **Living Bidirectional Sync (Chat ↔ Codebase):**
+   - When architectural consensus is reached in the chatbot (or when clicking the **"Sync ADR (PR)"** button on any Memory Card in the Memory Ledger), SynapseMem formats a standardized Architecture Decision Record (`docs/adr/ADR-00X-[topic].md`) and opens a Pull Request on GitHub to keep code and documentation in perfect synchronization.
+4. **Autonomous CI Guardian (PR-Linter):**
+   - The installed GitHub Actions workflow executes `node scripts/pr-linter.js` on every future Pull Request, checking changed files and git diffs against the active MongoDB Atlas memory ledger.
+   - Employs a 3-tier fallback execution engine: Live HTTP Server ➔ Direct MongoDB ➔ Zero-Dependency Standalone Fallback.
+   - Violations (such as introducing unauthorized packages like `redis` or touching production infrastructure during a deployment freeze) block the PR with actionable diagnostic feedback.
+
 ---
 
-## 7. Automated Test Suite (16/16 Verification Tests)
+## 7. Premium Obsidian UX & Interaction Design
+
+- **Vesper Aesthetic**: Pure Obsidian `#000000` dark theme with micro-borders (`border-white/10` to `border-white/20`), equalized button padding, and glowing neon accents (`#10b981` emerald, `#8b5cf6` purple, `#3b82f6` blue).
+- **Smooth Auto-Hiding Sidebar**:
+  - Smooth layout width transition between `58px` (collapsed icon rail) and `260px` (expanded channel view) using `transition: width 0.38s cubic-bezier(0.16, 1, 0.3, 1)`.
+  - Pinned by default for effortless navigation; supports smooth hover-expansion and permanent lock.
+- **Typography**: Inter Variable Roman paired with Instrument Serif Italic accents.
+- **Dual-Mode Contrast Panel**: Displays memory-grounded answers alongside baseline "without memory" responses to tangibly showcase behavioral adaptation.
+- **Autonomous GitHub Setup Modal**: Live visual pipeline tracking reverse ingestion, branch creation, workflow commit, and PR creation.
+
+---
+
+## 8. Automated Test Suite (17/17 Verification Tests)
 
 Run the full end-to-end verification suite:
 
@@ -349,3 +387,4 @@ npm test
 - [x] **Test 14:** Live Empirical Benchmark Engine & Multi-Architecture Scorecard
 - [x] **Test 15:** Semantic Conflict Arbiter & Pre-Commit Contradiction Shield
 - [x] **Test 16:** Enterprise Architecture Decision Record (ADR) & Dossier Exporter
+- [x] **Test 17:** Autonomous GitHub Self-Onboarding, Reverse Memory Ingestion & Living Bidirectional ADR Sync Engine

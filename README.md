@@ -5,7 +5,7 @@
 [![Vector Search](<https://img.shields.io/badge/Retrieval-%24vectorSearch%20(1024D)-blueviolet?style=for-the-badge>)](https://www.mongodb.com/docs/atlas/atlas-vector-search/)
 [![Embeddings](<https://img.shields.io/badge/Embeddings-Voyage%20AI%20(1024D)-orange?style=for-the-badge>)](https://docs.voyageai.com)
 [![Live LLMs](https://img.shields.io/badge/Live%20Models-Gemini%203%20Flash%20%7C%20Claude%203.7-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
-[![Tests](<https://img.shields.io/badge/Verification-16%2F16%20Passed%20(100%25)-brightgreen?style=for-the-badge>)](src/test-suite-v2.js)
+[![Tests](<https://img.shields.io/badge/Verification-17%2F17%20Passed%20(100%25)-brightgreen?style=for-the-badge>)](src/test-suite-v2.js)
 
 > **"Traditional AI chatbots retain conversation transcripts. SynapseMem 2.0 creates a persistent, self-evolving architectural memory operating system."**  
 > SynapseMem identifies what matters from natural developer interactions, embeds it into **MongoDB Atlas** using **Voyage AI 1024D vectors**, tracks bidirectional decision lineage, automatically expires constraints through an interactive **Time Machine**, and synthesizes strict zero-history answers grounded in live models like **Google Gemini 3 Flash** and **Anthropic Claude 3.7**.
@@ -78,6 +78,13 @@ Includes an automated benchmark runner testing 5 adversarial engineering scenari
 | **Hallucination Rate**            |        **0.0%**         |       64.0%       |         72.0%         |
 | **Token Reduction**               |        **86.4%**        |       42.1%       |    0.0% (Baseline)    |
 | **Superseded Directive Handling** | **Excluded / Replaced** | Confused / Leaked |   Confused / Leaked   |
+
+### 9. 🤖 Autonomous GitHub Self-Onboarding & Living ADR Sync
+
+Instead of manual configuration, SynapseMem installs itself directly into any developer repository:
+- **Zero-Click PR Installation:** Say *"Connect to my GitHub repository: https://github.com/acme/backend"* or click **"GitHub Onboard"**. The agent calls GitHub REST API via Octokit, creates branch `synapse/install-architecture-guard`, commits `.github/workflows/synapse-pr-linter.yml` & `scripts/pr-linter.js`, and opens an automated Pull Request.
+- **Reverse Memory Ingestion:** Crawls `package.json`, `docs/adr/`, `.env.example`, and `README.md` to instantly populate MongoDB Atlas with 1024D vectors so the agent is immediately knowledgeable about the codebase.
+- **Living ADR Sync:** Ratified architectural decisions in chat or Memory Ledger can be committed directly back as new `docs/adr/ADR-00X-[topic].md` Pull Requests!
 
 ---
 

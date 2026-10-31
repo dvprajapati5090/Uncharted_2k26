@@ -23,6 +23,7 @@
   "author": "SynapseMem Core Team",
   "license": "MIT",
   "dependencies": {
+    "@octokit/rest": "^22.0.1",
     "dotenv": "^16.4.7",
     "mongodb": "^6.13.0"
   }
