@@ -22,20 +22,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
 
       - name: Install Dependencies
-        run: npm install --no-audit --prefer-offline
+        run: |
+          if [ -f "package.json" ]; then
+            npm install --no-audit --prefer-offline || true
+          fi
 
       - name: Run SynapseMem PR Linter
         id: synapse_linter
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_REF: ${{ github.base_ref }}
         run: |
-          node scripts/pr-linter.js \
-            --text "${PR_TITLE} - ${PR_BODY}" \
-            --output-file pr-compliance-report.md
+          node scripts/pr-linter.js --output-file pr-compliance-report.md
         continue-on-error: true
 
       - name: Comment PR Compliance Report

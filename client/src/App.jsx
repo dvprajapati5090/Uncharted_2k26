@@ -449,8 +449,11 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to onboard repository');
 
       setGithubOnboardResult(data);
-      loadMemories();
-      showToast(`Autonomous setup complete! Pull request opened on ${data.repo}.`, 'success');
+      setLedgerFilter('all');
+      const memRes = await fetch('/api/memories?status=all');
+      const memData = await memRes.json();
+      setMemories(Array.isArray(memData) ? memData : []);
+      showToast(`Autonomous setup complete! Ingested ${data.ingestedMemories?.length || 0} memories from ${data.repo}.`, 'success');
     } catch (err) {
       showToast(`GitHub Onboarding error: ${err.message}`, 'error');
     } finally {
@@ -1951,6 +1954,13 @@ export default function App() {
                               >
                                 <Clock className="w-3 h-3" /> {isPast ? 'Expired:' : 'Valid until:'}{' '}
                                 {new Date(mem.valid_until).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              </div>
+                            )}
+
+                            {mem.source?.kind === 'github' && (
+                              <div className="text-[10px] text-emerald-300 font-mono flex items-center gap-1.5 mt-2 bg-emerald-950/70 border border-emerald-500/30 px-2 py-0.5 rounded-md w-fit">
+                                <GitBranch className="w-3 h-3 text-emerald-400" />
+                                <span>GitHub: {mem.source.repo} ({mem.source.path || 'codebase'})</span>
                               </div>
                             )}
                           </div>
