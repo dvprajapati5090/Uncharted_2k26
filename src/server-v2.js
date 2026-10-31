@@ -88,8 +88,26 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-function parseBody(req) {
+let isMongoInitialized = false;
+
+export async function ensureMongo() {
+  if (isMongoInitialized) return;
+  await initMongo();
+  isMongoInitialized = true;
+}
+
+export function parseBody(req) {
   return new Promise((resolve, reject) => {
+    if (req.body && typeof req.body === 'object') {
+      return resolve(req.body);
+    }
+    if (req.body && typeof req.body === 'string') {
+      try {
+        return resolve(JSON.parse(req.body));
+      } catch (err) {
+        return reject(new Error('Invalid JSON'));
+      }
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
@@ -104,7 +122,7 @@ function parseBody(req) {
   });
 }
 
-function sendJson(res, statusCode, data) {
+export function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
@@ -114,7 +132,7 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
-function sendFile(res, filePath) {
+export function sendFile(res, filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -134,7 +152,15 @@ function sendFile(res, filePath) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+export async function handleRequest(req, res) {
+  if (!isMongoInitialized) {
+    try {
+      await ensureMongo();
+    } catch (err) {
+      console.warn('[Serverless] Mongo lazy init note:', err.message);
+    }
+  }
+
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -145,8 +171,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = parsedUrl.pathname;
+  const rawUrl = req.headers['x-forwarded-uri'] || req.headers['x-matched-path'] || req.url;
+  const parsedUrl = new URL(rawUrl.startsWith('http') ? rawUrl : `http://${req.headers.host || 'localhost'}${rawUrl}`);
+  let pathname = parsedUrl.pathname;
+  if ((pathname === '/api/index' || pathname === '/api/index.js' || pathname.startsWith('/api/[...')) && req.query?.path) {
+    const subPath = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+    pathname = `/api/${subPath}`;
+  }
 
   try {
     // ----------------------------------------------------
@@ -990,16 +1021,22 @@ const server = http.createServer(async (req, res) => {
 
     // Static files
     let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
-    if (!fs.existsSync(filePath)) {
-      filePath = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(filePath)) {
+      return sendFile(res, filePath);
     }
-    return sendFile(res, filePath);
+    const fallbackPath = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(fallbackPath)) {
+      return sendFile(res, fallbackPath);
+    }
+    return sendJson(res, 404, { error: `Not found: ${pathname}` });
 
   } catch (err) {
     console.error('API Error:', err);
     return sendJson(res, 500, { error: err.message || 'Internal Server Error' });
   }
-});
+}
+
+export const server = http.createServer(handleRequest);
 
 function formatMemoryForUI(mem) {
   if (!mem) return null;
@@ -1070,4 +1107,14 @@ async function start() {
   });
 }
 
-start();
+if (process.env.VERCEL !== '1') {
+  const isDirectRun = process.argv[1] && (
+    process.argv[1].endsWith('server-v2.js') || 
+    process.argv[1].endsWith('server.js')
+  );
+  if (isDirectRun) {
+    start();
+  }
+}
+
+export default handleRequest;

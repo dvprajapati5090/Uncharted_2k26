@@ -91,6 +91,41 @@ process.exit(0);
 }
 
 /**
+ * Safely creates or updates a file in a GitHub repository,
+ * dynamically fetching the existing blob SHA if the file already exists on the branch.
+ */
+async function commitOrUpdateFileContents(octokit, { owner, repo, path, message, content, branch }) {
+  let fileSha = undefined;
+  try {
+    const existing = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref: branch
+    });
+    if (existing.data && existing.data.sha) {
+      fileSha = existing.data.sha;
+    }
+  } catch (err) {
+    // File does not exist yet on target branch, creating new file
+  }
+
+  const payload = {
+    owner,
+    repo,
+    path,
+    message,
+    content: Buffer.from(content).toString('base64'),
+    branch
+  };
+  if (fileSha) {
+    payload.sha = fileSha;
+  }
+
+  return await octokit.rest.repos.createOrUpdateFileContents(payload);
+}
+
+/**
  * Parses GitHub Repository URL into { owner, repo }
  */
 export function parseGitHubUrl(repoUrl) {
