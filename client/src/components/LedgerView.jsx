@@ -49,7 +49,7 @@ export default function LedgerView({
   selectedGraphNode,
   setSelectedGraphNode,
   graphLineage,
-  loadGraphLineage,
+  loadGraphLineage = () => {},
   hierarchyData = { clusters: [], summary: {} },
   loadHierarchyData,
   selectedCluster,
